@@ -1,10 +1,10 @@
--- ⚡ Fried Hub (FF2 - Safe Auto Catch + Keybind Tackle)
+-- ⚡ Fried Hub (FF2 - Stealthy Auto Catch + Keybind Tackle + Purple Ball)
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 local Window = Rayfield:CreateWindow({
     Name = "Fried Hub - FF2",
     LoadingTitle = "Fried Hub Loading",
-    LoadingSubtitle = "Auto Catch, Tackle Key, Hitbox",
+    LoadingSubtitle = "Auto Catch, Tackle Key, Hitbox, Purple Ball",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "FriedHub",
@@ -40,7 +40,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
 
-local magnet, esp, hitbox, autocatch = false, false, false, false
+local magnet, hitbox, autocatch = false, false, false
 local magnetRange, tackleRange = 60, 25
 local tackleCooldown = false
 
@@ -65,12 +65,6 @@ Tab:CreateSlider({
     Increment = 1,
     CurrentValue = 60,
     Callback = function(v) magnetRange = v end
-})
-
-Tab:CreateToggle({
-    Name = "Ball ESP",
-    CurrentValue = false,
-    Callback = function(v) esp = v end
 })
 
 Tab:CreateToggle({
@@ -140,19 +134,20 @@ RunService.Heartbeat:Connect(function()
     local ball = workspace:FindFirstChild("Football")
     local hand = getHand()
 
-    -- Auto Catch
+    -- Stealthy Auto Catch (smooth lerp with tiny random jitter)
     if autocatch and ball and hand then
         local dist = (ball.Position - hand.Position).Magnitude
-        if dist <= 65 then
+        if dist <= 50 then -- smaller range to reduce detection
             pcall(function()
-                ball.CFrame = hand.CFrame
-                ball.Velocity = Vector3.zero
-                ball.RotVelocity = Vector3.zero
+                local targetPos = hand.Position + Vector3.new(math.random(-5,5)*0.01, math.random(-5,5)*0.01, math.random(-5,5)*0.01)
+                local newPos = ball.Position:Lerp(targetPos, 0.25)
+                ball.Velocity = Vector3.new(0, 0, 0)
+                ball.CFrame = CFrame.new(newPos)
             end)
         end
     end
 
-    -- Magnet
+    -- Magnet (safe snap)
     if magnet and ball and hand then
         local dist = (ball.Position - hand.Position).Magnitude
         if dist <= magnetRange then
@@ -162,20 +157,24 @@ RunService.Heartbeat:Connect(function()
         end
     end
 
-    -- ESP
-    if esp and ball then
-        if not ball:FindFirstChild("Highlight") then
-            local h = Instance.new("Highlight", ball)
-            h.FillColor = Color3.fromRGB(255, 200, 0)
-            h.OutlineColor = Color3.fromRGB(255, 255, 255)
-            h.FillTransparency = 0.4
-            h.OutlineTransparency = 0
-        end
-    elseif ball and ball:FindFirstChild("Highlight") then
-        ball.Highlight:Destroy()
+    -- Ball color and glow effect (purple)
+    if ball then
+        pcall(function()
+            ball.BrickColor = BrickColor.new("Royal purple")
+            ball.Material = Enum.Material.Neon
+
+            -- Add PointLight for glow if it doesn't exist
+            if not ball:FindFirstChildOfClass("PointLight") then
+                local light = Instance.new("PointLight")
+                light.Color = Color3.fromRGB(128, 0, 128)
+                light.Brightness = 1
+                light.Range = 10
+                light.Parent = ball
+            end
+        end)
     end
 
-    -- Hitbox
+    -- Hitbox enlarger
     if hitbox and ball then
         pcall(function()
             ball.Size = Vector3.new(8, 8, 8)
