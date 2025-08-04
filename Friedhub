@@ -1,60 +1,207 @@
---⚡ FIELD HUB - FF2 CUSTOM UI (Blue Lightning Theme, Rayfield Style, No Library)
--- ✅ Mobile & PC Compatible | 🔒 Anti-Cheat Bypass Included | 💾 Saveable Configs
--- 🌐 Script by Mer | ⚠️ Do not skid or resell
-t
+--! loadstring
+
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
 
--- GLOBALS
-local hubOpen = 55
+-- Anti-Cheat Bypass (disable ban/report/log/flag remotes safely)
+for _, v in ipairs(ReplicatedStorage:GetDescendants()) do
+    if v:IsA("RemoteEvent") or v:IsA("RemoteFunction") then
+        local lname = v.Name:lower()
+        if lname:find("ban") or lname:find("report") or lname:find("log") or lname:find("flag") then
+            for _, conn in ipairs(getconnections(v.OnClientEvent or v.OnClientInvoke or {})) do
+                pcall(function() conn:Disable() end)
+            end
+        end
+    end
+end
+
+-- Config and Globals
 local config = {
-    magPower = 22,
+    magPower = 50,
+    magnetMode = "CFrame", -- "Exploit" or "CFrame"
+    hitboxShape = "Box", -- "Box", "Sphere", "Cylinder"
+    hitboxColor = Color3.fromRGB(0, 162, 255),
+    beamColor = Color3.fromRGB(0, 162, 255),
     legitMag = false,
     blatantMag = false,
+    superMag = false,
     lowGraphics = false,
-    superMag = false
+    highlightBall = true
 }
 
--- SAFE MAG FUNCTION
-local function getBall()
+-- Helper: Get football
+local function getFootball()
     for _, v in pairs(workspace:GetChildren()) do
         if v.Name:lower():find("football") and v:IsA("BasePart") then
             return v
         end
     end
+    return nil
 end
 
-local function legitMag()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local ball = getBall()
-    if not (hrp and ball) then return end
-
-    if (ball.Position - hrp.Position).Magnitude <= config.magPower then
-        firetouchinterest(ball, char:FindFirstChild("CatchLeft"), 0)
-        firetouchinterest(ball, char:FindFirstChild("CatchRight"), 0)
+-- Highlight football
+local highlight
+local function setBallHighlight(on)
+    if highlight then highlight:Destroy() highlight = nil end
+    if on then
+        local ball = getFootball()
+        if ball then
+            highlight = Instance.new("Highlight", ball)
+            highlight.FillColor = config.hitboxColor
+            highlight.FillTransparency = 0.5
+            highlight.OutlineColor = config.hitboxColor
+            highlight.OutlineTransparency = 0
+        end
     end
 end
 
--- LOW GRAPHICS MODE
+-- Low graphics mode
 local function setLowGraphics(on)
     Lighting.FogEnd = on and 100 or 100000
     Lighting.Brightness = on and 1 or 2
     Lighting.GlobalShadows = not on
 end
 
--- UI CREATION
+-- Magnet Hitbox visualization
+local magnetHitbox
+local function createHitbox(shape, color)
+    if magnetHitbox then magnetHitbox:Destroy() magnetHitbox = nil end
+    local box = Instance.new("Part")
+    box.Anchored = true
+    box.CanCollide = false
+    box.Size = Vector3.new(6, 6, 6)
+    box.Transparency = 0.7
+    box.Color = color
+    box.Material = Enum.Material.Neon
+    if shape == "Sphere" then
+        box.Shape = Enum.PartType.Ball
+    elseif shape == "Cylinder" then
+        box.Shape = Enum.PartType.Cylinder
+    else
+        box.Shape = Enum.PartType.Block
+    end
+    box.Parent = workspace
+    magnetHitbox = box
+end
+
+-- Beam for ball path visualization
+local beamPart, beamAttachment0, beamAttachment1, beam
+local function createBeam(color)
+    if beam then
+        beam:Destroy()
+        beam = nil
+        beamPart:Destroy()
+        beamPart = nil
+    end
+    beamPart = Instance.new("Part")
+    beamPart.Anchored = true
+    beamPart.CanCollide = false
+    beamPart.Transparency = 1
+    beamPart.Size = Vector3.new(1, 1, 1)
+    beamPart.Parent = workspace
+
+    beamAttachment0 = Instance.new("Attachment", beamPart)
+    beamAttachment1 = Instance.new("Attachment", beamPart)
+
+    beam = Instance.new("Beam", beamPart)
+    beam.Attachment0 = beamAttachment0
+    beam.Attachment1 = beamAttachment1
+    beam.Color = ColorSequence.new(color)
+    beam.LightEmission = 1
+    beam.Transparency = NumberSequence.new(0, 0.5)
+    beam.Width0 = 0.3
+    beam.Width1 = 0.1
+    beam.TextureMode = Enum.TextureMode.Stretch
+end
+
+-- Move beam to visualize football path
+local function updateBeam(targetPos)
+    if not beamPart then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    beamPart.CFrame = CFrame.new(hrp.Position, targetPos)
+    beamAttachment0.WorldPosition = hrp.Position
+    beamAttachment1.WorldPosition = targetPos
+end
+
+-- Magnet Functions
+local function fireTouchMag(ball)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local left = char:FindFirstChild("Left Arm") or char:FindFirstChild("CatchLeft")
+    local right = char:FindFirstChild("Right Arm") or char:FindFirstChild("CatchRight")
+    if not (left and right) then return end
+
+    firetouchinterest(left, ball, 0)
+    firetouchinterest(right, ball, 0)
+    task.wait()
+    firetouchinterest(left, ball, 1)
+    firetouchinterest(right, ball, 1)
+end
+
+local function cframeMag(ball)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    ball.CFrame = hrp.CFrame * CFrame.new(0, 0, -3)
+end
+
+local function legitMag()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local ball = getFootball()
+    if not (hrp and ball) then return end
+    if (ball.Position - hrp.Position).Magnitude <= config.magPower then
+        fireTouchMag(ball)
+    end
+end
+
+local function blatantMag()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local ball = getFootball()
+    if not (hrp and ball) then return end
+    if (ball.Position - hrp.Position).Magnitude <= config.magPower then
+        if config.magnetMode == "Exploit" then
+            fireTouchMag(ball)
+        else
+            cframeMag(ball)
+        end
+    end
+end
+
+local function superMag()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local ball = getFootball()
+    if not (hrp and ball) then return end
+    if (ball.Position - hrp.Position).Magnitude <= config.magPower * 3 then
+        if config.magnetMode == "Exploit" then
+            fireTouchMag(ball)
+        else
+            cframeMag(ball)
+        end
+    end
+end
+
+-- UI Setup (minimalistic blue glow)
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.Name = "FieldHubUI"
 ScreenGui.ResetOnSpawn = false
 
 local Main = Instance.new("Frame", ScreenGui)
-Main.Size = UDim2.new(0, 500, 0, 350)
+Main.Size = UDim2.new(0, 520, 0, 370)
 Main.Position = UDim2.new(0.3, 0, 0.3, 0)
 Main.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 Main.BorderSizePixel = 0
@@ -62,99 +209,170 @@ Main.Active = true
 Main.Draggable = true
 
 local Glow = Instance.new("UIStroke", Main)
-Glow.Thickness = 2
+Glow.Thickness = 3
 Glow.Color = Color3.fromRGB(0, 162, 255)
-Glow.Transparency = 0.2
+Glow.Transparency = 0
+Glow.LineJoinMode = Enum.LineJoinMode.Round
 
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 15)
 
 local Title = Instance.new("TextLabel", Main)
 Title.Text = "⚡ FIELD HUB - FF2"
-Title.Size = UDim2.new(1, 0, 0, 40)
+Title.Size = UDim2.new(1, 0, 0, 45)
 Title.BackgroundTransparency = 1
 Title.TextColor3 = Color3.fromRGB(0, 162, 255)
 Title.Font = Enum.Font.GothamBold
 Title.TextScaled = true
 
--- TABS
 local Tabs = Instance.new("Frame", Main)
-Tabs.Size = UDim2.new(0, 120, 1, -40)
-Tabs.Position = UDim2.new(0, 0, 0, 40)
+Tabs.Size = UDim2.new(0, 140, 1, -45)
+Tabs.Position = UDim2.new(0, 0, 0, 45)
 Tabs.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-Instance.new("UICorner", Tabs).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", Tabs).CornerRadius = UDim.new(0, 10)
 
-local Content = Instance.new("Frame", Main)
-Content.Size = UDim2.new(1, -130, 1, -50)
-Content.Position = UDim2.new(0, 130, 0, 45)
+local Content = Instance.new("ScrollingFrame", Main)
+Content.Size = UDim2.new(1, -150, 1, -60)
+Content.Position = UDim2.new(0, 150, 0, 55)
 Content.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 10)
+Content.ScrollBarThickness = 5
+Content.CanvasSize = UDim2.new(0, 0, 0, 0)
 
--- CREATE BUTTON FUNCTION
-local function createTabButton(name, onClick)
-    local btn = Instance.new("TextButton", Tabs)
-    btn.Size = UDim2.new(1, -10, 0, 30)
-    btn.Position = UDim2.new(0, 5, 0, #Tabs:GetChildren() * 32)
-    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 14
-    btn.Text = name
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
-    btn.MouseButton1Click:Connect(onClick)
+local layout = Instance.new("UIListLayout", Content)
+layout.SortOrder = Enum.SortOrder.LayoutOrder
+layout.Padding = UDim.new(0, 6)
+
+local function clearContent()
+    for _, child in ipairs(Content:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UISizeConstraint") then
+            child:Destroy()
+        end
+    end
 end
 
--- CREATE TOGGLE
 local function createToggle(text, default, callback)
-    local Toggle = Instance.new("TextButton", Content)
-    Toggle.Size = UDim2.new(1, -20, 0, 30)
-    Toggle.Position = UDim2.new(0, 10, 0, #Content:GetChildren() * 32)
-    Toggle.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    Toggle.TextColor3 = default and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(180, 180, 180)
-    Toggle.Font = Enum.Font.Gotham
-    Toggle.TextSize = 14
-    Toggle.Text = text .. (default and " [ON]" or " [OFF]")
-    Instance.new("UICorner", Toggle).CornerRadius = UDim.new(0, 4)
+    local container = Instance.new("Frame", Content)
+    container.Size = UDim2.new(1, -20, 0, 35)
+    container.BackgroundTransparency = 1
 
-    Toggle.MouseButton1Click:Connect(function()
+    local label = Instance.new("TextLabel", container)
+    label.Text = text
+    label.Size = UDim2.new(0.75, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 16
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local toggle = Instance.new("TextButton", container)
+    toggle.Size = UDim2.new(0.25, -10, 0.8, 0)
+    toggle.Position = UDim2.new(0.75, 10, 0.1, 0)
+    toggle.BackgroundColor3 = default and Color3.fromRGB(0, 162, 255) or Color3.fromRGB(50, 50, 50)
+    toggle.TextColor3 = Color3.new(1, 1, 1)
+    toggle.Font = Enum.Font.GothamBold
+    toggle.TextSize = 16
+    toggle.Text = default and "ON" or "OFF"
+    Instance.new("UICorner", toggle).CornerRadius = UDim.new(0, 6)
+
+    toggle.MouseButton1Click:Connect(function()
         default = not default
-        Toggle.TextColor3 = default and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(180, 180, 180)
-        Toggle.Text = text .. (default and " [ON]" or " [OFF]")
+        toggle.BackgroundColor3 = default and Color3.fromRGB(0, 162, 255) or Color3.fromRGB(50, 50, 50)
+        toggle.Text = default and "ON" or "OFF"
         callback(default)
     end)
 end
 
--- TAB ACTIONS
-createTabButton("Magnet", function()
-    Content:ClearAllChildren()
-    createToggle("Legit Magnet", config.legitMag, function(v) config.legitMag = v end)
-    createToggle("Blatant Magnet", config.blatantMag, function(v) config.blatantMag = v end)
-    createToggle("Super Magnet", config.superMag, function(v) config.superMag = v end)
-end)
+local function createSlider(text, min, max, default, callback)
+    local container = Instance.new("Frame", Content)
+    container.Size = UDim2.new(1, -20, 0, 50)
+    container.BackgroundTransparency = 1
 
-createTabButton("Visual", function()
-    Content:ClearAllChildren()
-    createToggle("Low Graphics", config.lowGraphics, function(v)
-        config.lowGraphics = v
-        setLowGraphics(v)
+    local label = Instance.new("TextLabel", container)
+    label.Text = text.." ("..default..")"
+    label.Size = UDim2.new(1, 0, 0, 20)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 16
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local sliderFrame = Instance.new("Frame", container)
+    sliderFrame.Size = UDim2.new(1, 0, 0, 20)
+    sliderFrame.Position = UDim2.new(0, 0, 0, 25)
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    Instance.new("UICorner", sliderFrame).CornerRadius = UDim.new(0, 6)
+
+    local sliderBar = Instance.new("Frame", sliderFrame)
+    sliderBar.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    sliderBar.BackgroundColor3 = Color3.fromRGB(0, 162, 255)
+    Instance.new("UICorner", sliderBar).CornerRadius = UDim.new(0, 6)
+
+    local input = Instance.new("TextBox", sliderFrame)
+    input.Size = UDim2.new(0, 50, 1, 0)
+    input.Position = UDim2.new(1, 5, 0, 0)
+    input.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    input.TextColor3 = Color3.fromRGB(200, 200, 200)
+    input.Text = tostring(default)
+    input.ClearTextOnFocus = false
+    input.Font = Enum.Font.Gotham
+    input.TextSize = 14
+    input.TextXAlignment = Enum.TextXAlignment.Center
+    Instance.new("UICorner", input).CornerRadius = UDim.new(0, 6)
+
+    local dragging = false
+
+    sliderFrame.InputBegan:Connect(function(input_)
+        if input_.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+        end
     end)
-end)
 
-createTabButton("Settings", function()
-    Content:ClearAllChildren()
-    createToggle("Minimize GUI", false, function(v)
-        Main.Visible = not v
+    sliderFrame.InputEnded:Connect(function(input_)
+        if input_.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
     end)
-end)
 
--- MAIN LOOP
-RunService.RenderStepped:Connect(function()
-    if config.legitMag then
-        pcall(legitMag)
-    end
-end)
+    sliderFrame.InputChanged:Connect(function(input_)
+        if dragging and input_.UserInputType == Enum.UserInputType.MouseMovement then
+            local rel = math.clamp(input_.Position.X - sliderFrame.AbsolutePosition.X, 0, sliderFrame.AbsoluteSize.X)
+            local val = math.floor((rel / sliderFrame.AbsoluteSize.X) * (max - min) + min)
+            sliderBar.Size = UDim2.new((val - min) / (max - min), 0, 1, 0)
+            input.Text = tostring(val)
+            label.Text = text.." ("..val..")"
+            callback(val)
+        end
+    end)
 
--- AUTO LOAD FIRST TAB
-wait(0.1)
-Tabs:GetChildren()[2]:MouseButton1Click()
+    input.FocusLost:Connect(function(enterPressed)
+        local val = tonumber(input.Text)
+        if val then
+            val = math.clamp(val, min, max)
+            sliderBar.Size = UDim2.new((val - min) / (max - min), 0, 1, 0)
+            input.Text = tostring(val)
+            label.Text = text.." ("..val..")"
+            callback(val)
+        else
+            input.Text = tostring(default)
+        end
+    end)
+end
 
--- END
+local function createDropdown(text, options, current, callback)
+    local container = Instance.new("Frame", Content)
+    container.Size = UDim2.new(1, -20, 0, 45)
+    container.BackgroundTransparency = 1
+
+    local label = Instance.new("TextLabel", container)
+    label.Text = text
+    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 16
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local dropdown = Instance.new("TextButton", container)
+    dropdown.Size = UDim2.new(0.4, -10, 0.8, 0)
+    dropdown.Position = UDim2.new(0.6, 10, 0.1, 0)
+    dropdown.Background
