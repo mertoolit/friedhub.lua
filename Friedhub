@@ -1,10 +1,10 @@
--- ⚡ Fried Hub (FF2 Auto Catch Edition)
+-- ⚡ Fried Hub (FF2 - Safe Auto Catch + Keybind Tackle)
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 local Window = Rayfield:CreateWindow({
     Name = "Fried Hub - FF2",
     LoadingTitle = "Fried Hub Loading",
-    LoadingSubtitle = "Auto Catch, Hitbox, ESP",
+    LoadingSubtitle = "Auto Catch, Tackle Key, Hitbox",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = "FriedHub",
@@ -35,10 +35,14 @@ lighting.Brightness = 1
 lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
 
 -- 🔧 Vars
-local Players, RunService = game:GetService("Players"), game:GetService("RunService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
-local magnet, esp, hitbox, tackle, autocatch = false, false, false, false, false
+
+local magnet, esp, hitbox, autocatch = false, false, false, false
 local magnetRange, tackleRange = 60, 25
+local tackleCooldown = false
 
 -- 🌐 GUI
 local Tab = Window:CreateTab("⚙️ Main", Color3.fromRGB(255, 255, 0))
@@ -75,31 +79,68 @@ Tab:CreateToggle({
     Callback = function(v) hitbox = v end
 })
 
-Tab:CreateToggle({
-    Name = "Tackle Range",
-    CurrentValue = false,
-    Callback = function(v) tackle = v end
-})
-
 Tab:CreateSlider({
-    Name = "Tackle Range Distance",
+    Name = "Tackle Keybind Range",
     Range = {10, 50},
     Increment = 1,
     CurrentValue = 25,
     Callback = function(v) tackleRange = v end
 })
 
--- 🧠 Logic
+-- 🔉 Create Hit Sound
+local function playHitSound()
+    local sound = Instance.new("Sound", workspace)
+    sound.SoundId = "rbxassetid://12222225" -- Roblox hit sound
+    sound.Volume = 2
+    sound:Play()
+    game.Debris:AddItem(sound, 2)
+end
+
+-- 🤸‍♂️ Safe Tackle Dash Function
+local function safeTackle(target)
+    local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    local phrp = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
+    if hrp and phrp then
+        local dir = (phrp.Position - hrp.Position).Unit
+        local behind = phrp.Position - (dir * 3) + Vector3.new(0, 1.5, 0)
+        hrp.CFrame = CFrame.new(behind)
+        playHitSound()
+    end
+end
+
+-- 🧠 Get Hand
 local function getHand()
     local c = lp.Character
     return c and (c:FindFirstChild("RightHand") or c:FindFirstChild("Right Arm") or c:FindFirstChild("HumanoidRootPart"))
 end
 
+-- ⌨️ Keybind Detection for "R" Tackle
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    if input.KeyCode == Enum.KeyCode.R and not tackleCooldown then
+        tackleCooldown = true
+        local nearest = nil
+        local shortest = tackleRange
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= lp and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = (lp.Character.HumanoidRootPart.Position - plr.Character.HumanoidRootPart.Position).Magnitude
+                if dist <= shortest then
+                    shortest = dist
+                    nearest = plr
+                end
+            end
+        end
+        if nearest then safeTackle(nearest) end
+        task.delay(1, function() tackleCooldown = false end) -- 1s cooldown
+    end
+end)
+
+-- 💡 Main Logic
 RunService.Heartbeat:Connect(function()
     local ball = workspace:FindFirstChild("Football")
     local hand = getHand()
 
-    -- ⚠️ Auto Catch (Safe Teleport to Hand)
+    -- Auto Catch
     if autocatch and ball and hand then
         local dist = (ball.Position - hand.Position).Magnitude
         if dist <= 65 then
@@ -111,7 +152,7 @@ RunService.Heartbeat:Connect(function()
         end
     end
 
-    -- ⚠️ Magnet (Safe Snap)
+    -- Magnet
     if magnet and ball and hand then
         local dist = (ball.Position - hand.Position).Magnitude
         if dist <= magnetRange then
@@ -121,7 +162,7 @@ RunService.Heartbeat:Connect(function()
         end
     end
 
-    -- 👁 Ball ESP
+    -- ESP
     if esp and ball then
         if not ball:FindFirstChild("Highlight") then
             local h = Instance.new("Highlight", ball)
@@ -134,7 +175,7 @@ RunService.Heartbeat:Connect(function()
         ball.Highlight:Destroy()
     end
 
-    -- 🎯 Hitbox Enlarger
+    -- Hitbox
     if hitbox and ball then
         pcall(function()
             ball.Size = Vector3.new(8, 8, 8)
@@ -144,18 +185,5 @@ RunService.Heartbeat:Connect(function()
     elseif ball then
         ball.Size = Vector3.new(3, 3, 3)
         ball.Transparency = 0
-    end
-
-    -- 💢 Tackle Range
-    if tackle and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-        for _, player in pairs(Players:GetPlayers()) do
-            if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                local dist = (lp.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
-                if dist <= tackleRange then
-                    lp.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(0, 0, -2)
-                    break
-                end
-            end
-        end
     end
 end)
