@@ -1,231 +1,96 @@
--- Fried Hub FF2 Advanced Script
+-- ⚡ Fried Hub (FF2) | Finity UI | Safe Magnet (No firetouchinterest), Pull, ESP
+local executor = identifyexecutor and identifyexecutor():lower() or "unknown"
+local isKRNL = executor:find("krnl")
+local isDelta = executor:find("delta")
 
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/xHeptc/Kavo-UI-Library/main/source.lua"))()
-local Window = Library.CreateLib("Fried Hub - FF2 Advanced", "DarkTheme")
+-- 🧩 Finity UI Setup
+local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Detourious/finity/master/finity.lua"))()
+local window = lib.new(true, "Fried Hub - FF2")
+window.ChangeToggleKey(Enum.KeyCode.RightControl)
 
--- Low Graphics
-for _, v in pairs(game:GetDescendants()) do
-    if v:IsA("BasePart") then
-        v.Material = Enum.Material.SmoothPlastic
-        v.Reflectance = 0
-        v.CastShadow = false
-    elseif v:IsA("Decal") or v:IsA("Texture") then
-        v:Destroy()
-    elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
-        v.Enabled = false
-    end
-end
-
-local lighting = game:GetService("Lighting")
-lighting.FogEnd = 1e9
-lighting.GlobalShadows = false
-lighting.Brightness = 1
-lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
-
+-- 🧲 Vars
 local Players, RunService = game:GetService("Players"), game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local lp = Players.LocalPlayer
-
--- Variables
-local magnet, pull, esp, trailEnabled = false, false, false, false
-local autoCatch, autoWalk, antiOOB = false, false, false
+local magnet, pull, esp, antiOOB = false, false, false, false
 local magnetRange, pullStrength = 60, 50
-local trailColor = Color3.fromRGB(255, 200, 0)
-local trailTransparency = 0.5
-local walkSpeed = 16
 local lastMagTick = 0
-local ballTrail = nil
+local safePos = Vector3.new(0, 50, 0)
 
--- Detect executor
-local executor = (identifyexecutor and identifyexecutor() or "Unknown"):lower()
-local usingDelta = executor:find("delta") ~= nil
-local usingKRNL = executor:find("krnl") ~= nil
-
--- Create ball trail function
-local function createTrail(ball)
-    if ballTrail then ballTrail:Destroy() end
-    local a0 = Instance.new("Attachment", ball)
-    a0.Position = Vector3.new(0, 0.5, 0)
-    local a1 = Instance.new("Attachment", ball)
-    a1.Position = Vector3.new(0, -0.5, 0)
-    local t = Instance.new("Trail", ball)
-    t.Attachment0 = a0
-    t.Attachment1 = a1
-    t.Color = ColorSequence.new(trailColor)
-    t.Transparency = NumberSequence.new(trailTransparency)
-    t.Lifetime = 1
-    t.MinLength = 0.1
-    return t
-end
-
--- Get player hand
+-- 🔧 Get Hand
 local function getHand()
-    local c = lp.Character
-    return c and (c:FindFirstChild("RightHand") or c:FindFirstChild("Right Arm") or c:FindFirstChild("HumanoidRootPart"))
+	local c = lp.Character
+	return c and (c:FindFirstChild("RightHand") or c:FindFirstChild("Right Arm") or c:FindFirstChild("HumanoidRootPart"))
 end
 
--- Get the football
-local function getBall()
-    return workspace:FindFirstChild("Football")
-end
+-- 🧱 UI Sections
+local main = window:Category("Main")
+local visual = window:Category("Visuals")
+local misc = window:Category("Misc")
 
--- Check if out of bounds (example limits, adjust if needed)
-local function isOutOfBounds()
-    local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-    local pos = hrp.Position
-    return pos.Y < -20 or pos.X > 500 or pos.X < -500 or pos.Z > 500 or pos.Z < -500
-end
+main:Sector("Magnet"):Cheat("Toggle", "Enable Magnet", function(v) magnet = v end)
+main:Sector("Magnet"):Cheat("Slider", "Magnet Range", function(v) magnetRange = v end, {min = 10, max = 80, default = 60})
+main:Sector("Magnet"):Cheat("Toggle", "Enable Pull Vector", function(v) pull = v end)
+main:Sector("Magnet"):Cheat("Slider", "Pull Strength", function(v) pullStrength = v end, {min = 10, max = 100, default = 50})
 
--- Teleport back to safe spot
-local function fixOutOfBounds()
-    local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        hrp.CFrame = CFrame.new(0, 10, 0)
-    end
-end
+visual:Sector("ESP"):Cheat("Toggle", "Ball ESP", function(v) esp = v end)
 
--- UI Setup
-local tabMain = Window:NewTab("Main")
-local secMain = tabMain:NewSection("General")
-
-secMain:NewToggle("Magnet", "", function(v) magnet = v end)
-secMain:NewSlider("Magnet Range", "", 80, 1, function(v) magnetRange = v end)
-secMain:NewToggle("Pull Vector", "", function(v) pull = v end)
-secMain:NewSlider("Pull Strength", "", 80, 0, function(v) pullStrength = v end)
-secMain:NewToggle("Ball ESP", "", function(v) esp = v end)
-secMain:NewToggle("Ball Trail", "", function(v)
-    trailEnabled = v
-    if not v and ballTrail then
-        ballTrail:Destroy()
-        ballTrail = nil
-    end
-end)
-secMain:NewColorPicker("Trail Color", "", trailColor, function(c)
-    trailColor = c
-    if ballTrail then
-        ballTrail.Color = ColorSequence.new(trailColor)
-    end
-end)
-secMain:NewSlider("Trail Transparency", "", 1, 0, function(v)
-    trailTransparency = v
-    if ballTrail then
-        ballTrail.Transparency = NumberSequence.new(trailTransparency)
-    end
+misc:Sector("Utility"):Cheat("Toggle", "Anti OOB", function(v) antiOOB = v end)
+misc:Sector("FPS Boost"):Cheat("Button", "Apply Low Graphics", function()
+	for _, v in pairs(game:GetDescendants()) do
+		if v:IsA("BasePart") then
+			v.Material = Enum.Material.SmoothPlastic
+			v.Reflectance, v.CastShadow = 0, false
+		elseif v:IsA("Decal") or v:IsA("Texture") then
+			v:Destroy()
+		elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+			v.Enabled = false
+		end
+	end
+	local lighting = game:GetService("Lighting")
+	lighting.FogEnd = 1e9
+	lighting.GlobalShadows = false
+	lighting.Brightness = 1
+	lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
 end)
 
-local tabExtras = Window:NewTab("Extras")
-local secExtras = tabExtras:NewSection("Extra Features")
-
-secExtras:NewToggle("Auto Catch", "", function(v) autoCatch = v end)
-secExtras:NewToggle("Auto Walk to Ball", "", function(v) autoWalk = v end)
-secExtras:NewSlider("Auto Walk Speed", "", 50, 8, function(v) walkSpeed = v end)
-secExtras:NewToggle("Anti Out Of Bounds", "", function(v) antiOOB = v end)
-
-local uiVisible = true
-secExtras:NewButton("Minimize/Restore UI", "Toggle UI visibility", function()
-    uiVisible = not uiVisible
-    if uiVisible then
-        Window:Show()
-    else
-        Window:Hide()
-    end
-end)
-
--- Main loop
+-- 🔁 Main Loop
 RunService.Heartbeat:Connect(function()
-    local ball = getBall()
-    local hand = getHand()
-    if not ball or not hand then return end
+	local ball = workspace:FindFirstChild("Football")
+	local hand = getHand()
+	if not (ball and hand) then return end
 
-    local dist = (ball.Position - hand.Position).Magnitude
+	-- ✅ Safe Magnet (CFrame-based only)
+	if magnet and tick() - lastMagTick > 0.05 then
+		local dist = (ball.Position - hand.Position).Magnitude
+		if dist <= magnetRange then
+			ball.CFrame = hand.CFrame
+			ball.Velocity = Vector3.zero
+			lastMagTick = tick()
+		end
+	end
 
-    -- Magnet + Pull
-    if magnet and dist <= magnetRange then
-        local dir = (hand.Position - ball.Position).Unit
-        ball.Velocity = dir * math.clamp(magnetRange - dist, 10, 60)
+	-- 🌀 Pull Vector
+	if pull and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+		local dir = (lp.Character.HumanoidRootPart.Position - ball.Position).Unit
+		ball.Velocity = dir * pullStrength
+	end
 
-        if usingDelta then
-            if tick() - lastMagTick > 0.2 then
-                pcall(function()
-                    firetouchinterest(ball, hand, 0)
-                    firetouchinterest(ball, hand, 1)
-                end)
-                lastMagTick = tick()
-            end
-        elseif usingKRNL then
-            if tick() - lastMagTick > 1 then
-                pcall(function()
-                    firetouchinterest(ball, hand, 0)
-                    firetouchinterest(ball, hand, 1)
-                end)
-                lastMagTick = tick()
-            end
-        else
-            if tick() - lastMagTick > 0.2 then
-                pcall(function()
-                    firetouchinterest(ball, hand, 0)
-                    firetouchinterest(ball, hand, 1)
-                end)
-                lastMagTick = tick()
-            end
-        end
-    end
+	-- 👁️ Ball ESP
+	if esp and not ball:FindFirstChild("Highlight") then
+		local h = Instance.new("Highlight", ball)
+		h.FillColor = Color3.fromRGB(255, 200, 0)
+		h.OutlineColor = Color3.fromRGB(255, 255, 255)
+		h.FillTransparency = 0.4
+		h.OutlineTransparency = 0
+	elseif not esp and ball:FindFirstChild("Highlight") then
+		ball.Highlight:Destroy()
+	end
 
-    if pull then
-        local dir = (lp.Character.HumanoidRootPart.Position - ball.Position).Unit
-        ball.Velocity = dir * pullStrength
-    end
-
-    -- Auto Catch (try touching ball when close)
-    if autoCatch and dist <= 6 then
-        pcall(function()
-            firetouchinterest(ball, hand, 0)
-            firetouchinterest(ball, hand, 1)
-        end)
-    end
-
-    -- Auto Walk toward ball
-    if autoWalk then
-        local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-        local humanoid = lp.Character and lp.Character:FindFirstChild("Humanoid")
-        if hrp and humanoid then
-            local targetPos = ball.Position - Vector3.new(0, 3, 0)
-            humanoid.WalkSpeed = walkSpeed
-            hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(targetPos), 0.15)
-        end
-    else
-        local humanoid = lp.Character and lp.Character:FindFirstChild("Humanoid")
-        if humanoid then
-            humanoid.WalkSpeed = 16 -- reset to default if autoWalk off
-        end
-    end
-
-    -- Anti Out Of Bounds
-    if antiOOB and isOutOfBounds() then
-        fixOutOfBounds()
-    end
-
-    -- ESP
-    if esp then
-        if not ball:FindFirstChild("Highlight") then
-            local h = Instance.new("Highlight", ball)
-            h.FillColor = Color3.fromRGB(255, 200, 0)
-            h.OutlineColor = Color3.fromRGB(255, 255, 255)
-            h.FillTransparency = 0.4
-            h.OutlineTransparency = 0
-        end
-    elseif ball:FindFirstChild("Highlight") then
-        ball.Highlight:Destroy()
-    end
-
-    -- Trail
-    if trailEnabled then
-        if not ballTrail or ballTrail.Parent ~= ball then
-            ballTrail = createTrail(ball)
-        end
-    elseif ballTrail then
-        ballTrail:Destroy()
-        ballTrail = nil
-    end
+	-- 🛑 Anti OOB
+	if antiOOB and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+		local pos = lp.Character.HumanoidRootPart.Position
+		if math.abs(pos.Y) > 500 or math.abs(pos.X) > 10000 or math.abs(pos.Z) > 10000 then
+			lp.Character.HumanoidRootPart.CFrame = CFrame.new(safePos)
+		end
+	end
 end)
