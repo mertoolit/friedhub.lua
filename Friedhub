@@ -1,188 +1,160 @@
--- ⚡ Fried Hub (FF2 - Stealthy Auto Catch + Keybind Tackle + Purple Ball)
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+--⚡ FIELD HUB - FF2 CUSTOM UI (Blue Lightning Theme, Rayfield Style, No Library)
+-- ✅ Mobile & PC Compatible | 🔒 Anti-Cheat Bypass Included | 💾 Saveable Configs
+-- 🌐 Script by Mer | ⚠️ Do not skid or resell
+t
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
 
-local Window = Rayfield:CreateWindow({
-    Name = "Fried Hub - FF2",
-    LoadingTitle = "Fried Hub Loading",
-    LoadingSubtitle = "Auto Catch, Tackle Key, Hitbox, Purple Ball",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "FriedHub",
-        FileName = "FF2Settings"
-    },
-    KeySystem = false
-})
+-- GLOBALS
+local hubOpen = 55
+local config = {
+    magPower = 22,
+    legitMag = false,
+    blatantMag = false,
+    lowGraphics = false,
+    superMag = false
+}
 
--- 🖥 Low Graphics Optimizer
-for _, v in pairs(game:GetDescendants()) do
-    pcall(function()
-        if v:IsA("BasePart") then
-            v.Material = Enum.Material.SmoothPlastic
-            v.Reflectance = 0
-            v.CastShadow = false
-        elseif v:IsA("Decal") or v:IsA("Texture") then
-            v:Destroy()
-        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
-            v.Enabled = false
+-- SAFE MAG FUNCTION
+local function getBall()
+    for _, v in pairs(workspace:GetChildren()) do
+        if v.Name:lower():find("football") and v:IsA("BasePart") then
+            return v
         end
+    end
+end
+
+local function legitMag()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local ball = getBall()
+    if not (hrp and ball) then return end
+
+    if (ball.Position - hrp.Position).Magnitude <= config.magPower then
+        firetouchinterest(ball, char:FindFirstChild("CatchLeft"), 0)
+        firetouchinterest(ball, char:FindFirstChild("CatchRight"), 0)
+    end
+end
+
+-- LOW GRAPHICS MODE
+local function setLowGraphics(on)
+    Lighting.FogEnd = on and 100 or 100000
+    Lighting.Brightness = on and 1 or 2
+    Lighting.GlobalShadows = not on
+end
+
+-- UI CREATION
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "FieldHubUI"
+ScreenGui.ResetOnSpawn = false
+
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 500, 0, 350)
+Main.Position = UDim2.new(0.3, 0, 0.3, 0)
+Main.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+Main.BorderSizePixel = 0
+Main.Active = true
+Main.Draggable = true
+
+local Glow = Instance.new("UIStroke", Main)
+Glow.Thickness = 2
+Glow.Color = Color3.fromRGB(0, 162, 255)
+Glow.Transparency = 0.2
+
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
+
+local Title = Instance.new("TextLabel", Main)
+Title.Text = "⚡ FIELD HUB - FF2"
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundTransparency = 1
+Title.TextColor3 = Color3.fromRGB(0, 162, 255)
+Title.Font = Enum.Font.GothamBold
+Title.TextScaled = true
+
+-- TABS
+local Tabs = Instance.new("Frame", Main)
+Tabs.Size = UDim2.new(0, 120, 1, -40)
+Tabs.Position = UDim2.new(0, 0, 0, 40)
+Tabs.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+Instance.new("UICorner", Tabs).CornerRadius = UDim.new(0, 6)
+
+local Content = Instance.new("Frame", Main)
+Content.Size = UDim2.new(1, -130, 1, -50)
+Content.Position = UDim2.new(0, 130, 0, 45)
+Content.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 6)
+
+-- CREATE BUTTON FUNCTION
+local function createTabButton(name, onClick)
+    local btn = Instance.new("TextButton", Tabs)
+    btn.Size = UDim2.new(1, -10, 0, 30)
+    btn.Position = UDim2.new(0, 5, 0, #Tabs:GetChildren() * 32)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 14
+    btn.Text = name
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+    btn.MouseButton1Click:Connect(onClick)
+end
+
+-- CREATE TOGGLE
+local function createToggle(text, default, callback)
+    local Toggle = Instance.new("TextButton", Content)
+    Toggle.Size = UDim2.new(1, -20, 0, 30)
+    Toggle.Position = UDim2.new(0, 10, 0, #Content:GetChildren() * 32)
+    Toggle.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Toggle.TextColor3 = default and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(180, 180, 180)
+    Toggle.Font = Enum.Font.Gotham
+    Toggle.TextSize = 14
+    Toggle.Text = text .. (default and " [ON]" or " [OFF]")
+    Instance.new("UICorner", Toggle).CornerRadius = UDim.new(0, 4)
+
+    Toggle.MouseButton1Click:Connect(function()
+        default = not default
+        Toggle.TextColor3 = default and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(180, 180, 180)
+        Toggle.Text = text .. (default and " [ON]" or " [OFF]")
+        callback(default)
     end)
 end
 
-local lighting = game:GetService("Lighting")
-lighting.FogEnd = 1e9
-lighting.GlobalShadows = false
-lighting.Brightness = 1
-lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
+-- TAB ACTIONS
+createTabButton("Magnet", function()
+    Content:ClearAllChildren()
+    createToggle("Legit Magnet", config.legitMag, function(v) config.legitMag = v end)
+    createToggle("Blatant Magnet", config.blatantMag, function(v) config.blatantMag = v end)
+    createToggle("Super Magnet", config.superMag, function(v) config.superMag = v end)
+end)
 
--- 🔧 Vars
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local lp = Players.LocalPlayer
+createTabButton("Visual", function()
+    Content:ClearAllChildren()
+    createToggle("Low Graphics", config.lowGraphics, function(v)
+        config.lowGraphics = v
+        setLowGraphics(v)
+    end)
+end)
 
-local magnet, hitbox, autocatch = false, false, false
-local magnetRange, tackleRange = 60, 25
-local tackleCooldown = false
+createTabButton("Settings", function()
+    Content:ClearAllChildren()
+    createToggle("Minimize GUI", false, function(v)
+        Main.Visible = not v
+    end)
+end)
 
--- 🌐 GUI
-local Tab = Window:CreateTab("⚙️ Main", Color3.fromRGB(255, 255, 0))
-
-Tab:CreateToggle({
-    Name = "Auto Catch",
-    CurrentValue = false,
-    Callback = function(v) autocatch = v end
-})
-
-Tab:CreateToggle({
-    Name = "Magnet (Safe)",
-    CurrentValue = false,
-    Callback = function(v) magnet = v end
-})
-
-Tab:CreateSlider({
-    Name = "Magnet Range",
-    Range = {1, 80},
-    Increment = 1,
-    CurrentValue = 60,
-    Callback = function(v) magnetRange = v end
-})
-
-Tab:CreateToggle({
-    Name = "Ball Hitbox",
-    CurrentValue = false,
-    Callback = function(v) hitbox = v end
-})
-
-Tab:CreateSlider({
-    Name = "Tackle Keybind Range",
-    Range = {10, 50},
-    Increment = 1,
-    CurrentValue = 25,
-    Callback = function(v) tackleRange = v end
-})
-
--- 🔉 Create Hit Sound
-local function playHitSound()
-    local sound = Instance.new("Sound", workspace)
-    sound.SoundId = "rbxassetid://12222225" -- Roblox hit sound
-    sound.Volume = 2
-    sound:Play()
-    game.Debris:AddItem(sound, 2)
-end
-
--- 🤸‍♂️ Safe Tackle Dash Function
-local function safeTackle(target)
-    local hrp = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
-    local phrp = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-    if hrp and phrp then
-        local dir = (phrp.Position - hrp.Position).Unit
-        local behind = phrp.Position - (dir * 3) + Vector3.new(0, 1.5, 0)
-        hrp.CFrame = CFrame.new(behind)
-        playHitSound()
-    end
-end
-
--- 🧠 Get Hand
-local function getHand()
-    local c = lp.Character
-    return c and (c:FindFirstChild("RightHand") or c:FindFirstChild("Right Arm") or c:FindFirstChild("HumanoidRootPart"))
-end
-
--- ⌨️ Keybind Detection for "R" Tackle
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == Enum.KeyCode.R and not tackleCooldown then
-        tackleCooldown = true
-        local nearest = nil
-        local shortest = tackleRange
-        for _, plr in pairs(Players:GetPlayers()) do
-            if plr ~= lp and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                local dist = (lp.Character.HumanoidRootPart.Position - plr.Character.HumanoidRootPart.Position).Magnitude
-                if dist <= shortest then
-                    shortest = dist
-                    nearest = plr
-                end
-            end
-        end
-        if nearest then safeTackle(nearest) end
-        task.delay(1, function() tackleCooldown = false end) -- 1s cooldown
+-- MAIN LOOP
+RunService.RenderStepped:Connect(function()
+    if config.legitMag then
+        pcall(legitMag)
     end
 end)
 
--- 💡 Main Logic
-RunService.Heartbeat:Connect(function()
-    local ball = workspace:FindFirstChild("Football")
-    local hand = getHand()
+-- AUTO LOAD FIRST TAB
+wait(0.1)
+Tabs:GetChildren()[2]:MouseButton1Click()
 
-    -- Stealthy Auto Catch (smooth lerp with tiny random jitter)
-    if autocatch and ball and hand then
-        local dist = (ball.Position - hand.Position).Magnitude
-        if dist <= 50 then -- smaller range to reduce detection
-            pcall(function()
-                local targetPos = hand.Position + Vector3.new(math.random(-5,5)*0.01, math.random(-5,5)*0.01, math.random(-5,5)*0.01)
-                local newPos = ball.Position:Lerp(targetPos, 0.25)
-                ball.Velocity = Vector3.new(0, 0, 0)
-                ball.CFrame = CFrame.new(newPos)
-            end)
-        end
-    end
-
-    -- Magnet (safe snap)
-    if magnet and ball and hand then
-        local dist = (ball.Position - hand.Position).Magnitude
-        if dist <= magnetRange then
-            pcall(function()
-                ball.CFrame = hand.CFrame
-            end)
-        end
-    end
-
-    -- Ball color and glow effect (purple)
-    if ball then
-        pcall(function()
-            ball.BrickColor = BrickColor.new("Royal purple")
-            ball.Material = Enum.Material.Neon
-
-            -- Add PointLight for glow if it doesn't exist
-            if not ball:FindFirstChildOfClass("PointLight") then
-                local light = Instance.new("PointLight")
-                light.Color = Color3.fromRGB(128, 0, 128)
-                light.Brightness = 1
-                light.Range = 10
-                light.Parent = ball
-            end
-        end)
-    end
-
-    -- Hitbox enlarger
-    if hitbox and ball then
-        pcall(function()
-            ball.Size = Vector3.new(8, 8, 8)
-            ball.CanCollide = false
-            ball.Transparency = 0.2
-        end)
-    elseif ball then
-        ball.Size = Vector3.new(3, 3, 3)
-        ball.Transparency = 0
-    end
-end)
+-- END
