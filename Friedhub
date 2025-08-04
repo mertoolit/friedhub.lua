@@ -1,96 +1,161 @@
--- ⚡ Fried Hub (FF2) | Finity UI | Safe Magnet (No firetouchinterest), Pull, ESP
-local executor = identifyexecutor and identifyexecutor():lower() or "unknown"
-local isKRNL = executor:find("krnl")
-local isDelta = executor:find("delta")
+-- ⚡ Fried Hub (FF2 Auto Catch Edition)
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
--- 🧩 Finity UI Setup
-local lib = loadstring(game:HttpGet("https://raw.githubusercontent.com/Detourious/finity/master/finity.lua"))()
-local window = lib.new(true, "Fried Hub - FF2")
-window.ChangeToggleKey(Enum.KeyCode.RightControl)
+local Window = Rayfield:CreateWindow({
+    Name = "Fried Hub - FF2",
+    LoadingTitle = "Fried Hub Loading",
+    LoadingSubtitle = "Auto Catch, Hitbox, ESP",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "FriedHub",
+        FileName = "FF2Settings"
+    },
+    KeySystem = false
+})
 
--- 🧲 Vars
-local Players, RunService = game:GetService("Players"), game:GetService("RunService")
-local lp = Players.LocalPlayer
-local magnet, pull, esp, antiOOB = false, false, false, false
-local magnetRange, pullStrength = 60, 50
-local lastMagTick = 0
-local safePos = Vector3.new(0, 50, 0)
-
--- 🔧 Get Hand
-local function getHand()
-	local c = lp.Character
-	return c and (c:FindFirstChild("RightHand") or c:FindFirstChild("Right Arm") or c:FindFirstChild("HumanoidRootPart"))
+-- 🖥 Low Graphics Optimizer
+for _, v in pairs(game:GetDescendants()) do
+    pcall(function()
+        if v:IsA("BasePart") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.Reflectance = 0
+            v.CastShadow = false
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            v:Destroy()
+        elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+            v.Enabled = false
+        end
+    end)
 end
 
--- 🧱 UI Sections
-local main = window:Category("Main")
-local visual = window:Category("Visuals")
-local misc = window:Category("Misc")
+local lighting = game:GetService("Lighting")
+lighting.FogEnd = 1e9
+lighting.GlobalShadows = false
+lighting.Brightness = 1
+lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
 
-main:Sector("Magnet"):Cheat("Toggle", "Enable Magnet", function(v) magnet = v end)
-main:Sector("Magnet"):Cheat("Slider", "Magnet Range", function(v) magnetRange = v end, {min = 10, max = 80, default = 60})
-main:Sector("Magnet"):Cheat("Toggle", "Enable Pull Vector", function(v) pull = v end)
-main:Sector("Magnet"):Cheat("Slider", "Pull Strength", function(v) pullStrength = v end, {min = 10, max = 100, default = 50})
+-- 🔧 Vars
+local Players, RunService = game:GetService("Players"), game:GetService("RunService")
+local lp = Players.LocalPlayer
+local magnet, esp, hitbox, tackle, autocatch = false, false, false, false, false
+local magnetRange, tackleRange = 60, 25
 
-visual:Sector("ESP"):Cheat("Toggle", "Ball ESP", function(v) esp = v end)
+-- 🌐 GUI
+local Tab = Window:CreateTab("⚙️ Main", Color3.fromRGB(255, 255, 0))
 
-misc:Sector("Utility"):Cheat("Toggle", "Anti OOB", function(v) antiOOB = v end)
-misc:Sector("FPS Boost"):Cheat("Button", "Apply Low Graphics", function()
-	for _, v in pairs(game:GetDescendants()) do
-		if v:IsA("BasePart") then
-			v.Material = Enum.Material.SmoothPlastic
-			v.Reflectance, v.CastShadow = 0, false
-		elseif v:IsA("Decal") or v:IsA("Texture") then
-			v:Destroy()
-		elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
-			v.Enabled = false
-		end
-	end
-	local lighting = game:GetService("Lighting")
-	lighting.FogEnd = 1e9
-	lighting.GlobalShadows = false
-	lighting.Brightness = 1
-	lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
-end)
+Tab:CreateToggle({
+    Name = "Auto Catch",
+    CurrentValue = false,
+    Callback = function(v) autocatch = v end
+})
 
--- 🔁 Main Loop
+Tab:CreateToggle({
+    Name = "Magnet (Safe)",
+    CurrentValue = false,
+    Callback = function(v) magnet = v end
+})
+
+Tab:CreateSlider({
+    Name = "Magnet Range",
+    Range = {1, 80},
+    Increment = 1,
+    CurrentValue = 60,
+    Callback = function(v) magnetRange = v end
+})
+
+Tab:CreateToggle({
+    Name = "Ball ESP",
+    CurrentValue = false,
+    Callback = function(v) esp = v end
+})
+
+Tab:CreateToggle({
+    Name = "Ball Hitbox",
+    CurrentValue = false,
+    Callback = function(v) hitbox = v end
+})
+
+Tab:CreateToggle({
+    Name = "Tackle Range",
+    CurrentValue = false,
+    Callback = function(v) tackle = v end
+})
+
+Tab:CreateSlider({
+    Name = "Tackle Range Distance",
+    Range = {10, 50},
+    Increment = 1,
+    CurrentValue = 25,
+    Callback = function(v) tackleRange = v end
+})
+
+-- 🧠 Logic
+local function getHand()
+    local c = lp.Character
+    return c and (c:FindFirstChild("RightHand") or c:FindFirstChild("Right Arm") or c:FindFirstChild("HumanoidRootPart"))
+end
+
 RunService.Heartbeat:Connect(function()
-	local ball = workspace:FindFirstChild("Football")
-	local hand = getHand()
-	if not (ball and hand) then return end
+    local ball = workspace:FindFirstChild("Football")
+    local hand = getHand()
 
-	-- ✅ Safe Magnet (CFrame-based only)
-	if magnet and tick() - lastMagTick > 0.05 then
-		local dist = (ball.Position - hand.Position).Magnitude
-		if dist <= magnetRange then
-			ball.CFrame = hand.CFrame
-			ball.Velocity = Vector3.zero
-			lastMagTick = tick()
-		end
-	end
+    -- ⚠️ Auto Catch (Safe Teleport to Hand)
+    if autocatch and ball and hand then
+        local dist = (ball.Position - hand.Position).Magnitude
+        if dist <= 65 then
+            pcall(function()
+                ball.CFrame = hand.CFrame
+                ball.Velocity = Vector3.zero
+                ball.RotVelocity = Vector3.zero
+            end)
+        end
+    end
 
-	-- 🌀 Pull Vector
-	if pull and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-		local dir = (lp.Character.HumanoidRootPart.Position - ball.Position).Unit
-		ball.Velocity = dir * pullStrength
-	end
+    -- ⚠️ Magnet (Safe Snap)
+    if magnet and ball and hand then
+        local dist = (ball.Position - hand.Position).Magnitude
+        if dist <= magnetRange then
+            pcall(function()
+                ball.CFrame = hand.CFrame
+            end)
+        end
+    end
 
-	-- 👁️ Ball ESP
-	if esp and not ball:FindFirstChild("Highlight") then
-		local h = Instance.new("Highlight", ball)
-		h.FillColor = Color3.fromRGB(255, 200, 0)
-		h.OutlineColor = Color3.fromRGB(255, 255, 255)
-		h.FillTransparency = 0.4
-		h.OutlineTransparency = 0
-	elseif not esp and ball:FindFirstChild("Highlight") then
-		ball.Highlight:Destroy()
-	end
+    -- 👁 Ball ESP
+    if esp and ball then
+        if not ball:FindFirstChild("Highlight") then
+            local h = Instance.new("Highlight", ball)
+            h.FillColor = Color3.fromRGB(255, 200, 0)
+            h.OutlineColor = Color3.fromRGB(255, 255, 255)
+            h.FillTransparency = 0.4
+            h.OutlineTransparency = 0
+        end
+    elseif ball and ball:FindFirstChild("Highlight") then
+        ball.Highlight:Destroy()
+    end
 
-	-- 🛑 Anti OOB
-	if antiOOB and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-		local pos = lp.Character.HumanoidRootPart.Position
-		if math.abs(pos.Y) > 500 or math.abs(pos.X) > 10000 or math.abs(pos.Z) > 10000 then
-			lp.Character.HumanoidRootPart.CFrame = CFrame.new(safePos)
-		end
-	end
+    -- 🎯 Hitbox Enlarger
+    if hitbox and ball then
+        pcall(function()
+            ball.Size = Vector3.new(8, 8, 8)
+            ball.CanCollide = false
+            ball.Transparency = 0.2
+        end)
+    elseif ball then
+        ball.Size = Vector3.new(3, 3, 3)
+        ball.Transparency = 0
+    end
+
+    -- 💢 Tackle Range
+    if tackle and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= lp and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = (lp.Character.HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                if dist <= tackleRange then
+                    lp.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(0, 0, -2)
+                    break
+                end
+            end
+        end
+    end
 end)
