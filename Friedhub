@@ -1,261 +1,545 @@
---[[
-    Football Fusion 2 GUI Script by a7rr4 (Fully Integrated + Low Graphics & CFrame Speed)
-    Features:
-    - Toggle Menu (B key + button top right)
-    - Magnet Catch with Adjustable Range
-    - FireTouchInterest Auto Catch (50ms spam)
-    - Ball ESP (Highlight)
-    - Angle Enhancer Toggle
-    - Freeze Tech (Toggle + adjustable freeze seconds)
-      Auto freezes player on catch for set duration
-    - Ball Path Visualizer (Toggle, draws line behind football)
-    - Low Graphics Mode Toggle (limits FPS ~30)
-    - CFrame Speed Toggle + adjustable slider (1-80)
-    - Draggable GUI top-left corner
-    - No speed/jump edits
-]]
+-- == FF2 FULL SCRIPT: All Features Toggleable ==
+-- Football Fusion 2 combined script: Magnet, Pull Vector, Ball ESP, Landing Prediction, Auto Catch, Auto Rush
+-- No persistent saves. Draggable GUI, right-shift toggle. Optimized loops.
 
-local UserInputService = game:GetService("UserInputService")
+-- ====== SERVICES ======
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = workspace
 
-local player = Players.LocalPlayer
-local mouse = player:GetMouse()
-local guiToggled = true
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Mouse = LocalPlayer:GetMouse()
 
-local settingsKey = "FF2_Settings"
-local settings = {
-    magnet = true,
-    autoCatch = true,
-    angle = true,
-    freezeTech = false,
-    freezeTime = 2,
-    esp = true,
-    path = true,
-    lowGraphics = false,
-    cframeSpeedToggle = false,
-    cframeSpeed = 20,
-    range = 20
+-- ====== CONFIG (mutable via GUI) ======
+local config = {
+    MagnetEnabled = true,
+    MagnetRange = 60, -- 1..100
+    MagnetStrength = 1, -- multiplier
+    PullVectorEnabled = true,
+    PullVectorStrength = 40, -- 0..80
+    BallESPEnabled = true,
+    LandingPredictionEnabled = true,
+    UseTrail = true,
+    AutoCatch = true,
+    AutoRush = false,
+    RushDistance = 30,
+    RushCooldown = 1.2,
+    PredictionColor = Color3.fromRGB(255, 125, 0),
+    ESPColor = Color3.fromRGB(0, 255, 125),
+    MagnetTargetName = "Football",
 }
 
-pcall(function()
-    local stored = HttpService:JSONDecode(readfile(settingsKey))
-    for k,v in pairs(stored) do settings[k] = v end
-end)
+-- ====== TRAJECTORY CONSTANTS ======
+local Gravity = Vector3.new(0, -28, 0)
+local SegmentCount = 160
+local TimeStep = 0.035
 
-local function saveSettings()
-    pcall(function()
-        writefile(settingsKey, HttpService:JSONEncode(settings))
-    end)
+-- ====== STATE ======
+local lastRush = 0
+local espObjects = {}
+local predictionCache = {}
+
+-- ====== UTIL ======
+local function safeDestroy(obj)
+    if obj and obj.Destroy then
+        pcall(function() obj:Destroy() end)
+    end
 end
 
--- GUI Setup
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "FF2_GUI"
-screenGui.ResetOnSpawn = false
-screenGui.Parent = game.CoreGui
-
-local frame = Instance.new("Frame", screenGui)
-frame.Size = UDim2.new(0, 320, 0, 460)
-frame.Position = UDim2.new(0, 10, 0, 10) -- Top-left corner with padding
-frame.BackgroundColor3 = Color3.fromRGB(42, 75, 160)
-frame.BorderSizePixel = 0
-frame.Active = true
-frame.Draggable = true
-frame.Name = "MainMenu"
-
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, 0, 0, 30)
-title.BackgroundTransparency = 1
-title.Text = "FF2 Cheat Menu"
-title.TextColor3 = Color3.new(1, 1, 1)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 18
-
-local yOffset = 35
-local function createToggle(name, default, callback)
-    local button = Instance.new("TextButton", frame)
-    button.Size = UDim2.new(1, -10, 0, 30)
-    button.Position = UDim2.new(0, 5, 0, yOffset)
-    button.Text = name .. ": " .. (default and "ON" or "OFF")
-    button.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    button.TextColor3 = Color3.new(1,1,1)
-    button.Font = Enum.Font.Gotham
-    button.TextSize = 14
-    button.MouseButton1Click:Connect(function()
-        default = not default
-        button.Text = name .. ": " .. (default and "ON" or "OFF")
-        callback(default)
-        saveSettings()
-    end)
-    yOffset = yOffset + 35
+-- ====== TRAJECTORY FUNCTIONS ======
+local function getTrajectory(startPos, velocity)
+    local pos, vel = startPos, velocity
+    local points = {pos}
+    for _ = 1, SegmentCount do
+        vel += Gravity * TimeStep
+        pos += vel * TimeStep
+        table.insert(points, pos)
+        if pos.Y < 0 then break end
+    end
+    return points, pos
 end
 
-local function createSliderBox(name, initialValue, minVal, maxVal, callback)
-    local box = Instance.new("TextBox", frame)
-    box.Position = UDim2.new(0, 5, 0, yOffset)
-    box.Size = UDim2.new(1, -10, 0, 30)
-    box.Text = name .. ": " .. tostring(initialValue)
-    box.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    box.TextColor3 = Color3.new(1,1,1)
-    box.ClearTextOnFocus = true
-    box.Font = Enum.Font.Gotham
-    box.TextSize = 14
-    box.FocusLost:Connect(function()
-        local val = tonumber(box.Text:match("%d+"))
-        if val then
-            val = math.clamp(val, minVal, maxVal)
-            box.Text = name .. ": " .. val
-            callback(val)
-            saveSettings()
-        else
-            box.Text = name .. ": " .. tostring(initialValue)
+local function makeArc(points, color)
+    local atts, beams = {}, {}
+    for _, p in ipairs(points) do
+        local a = Instance.new("Attachment")
+        a.WorldPosition = p
+        a.Parent = Workspace.Terrain
+        table.insert(atts, a)
+    end
+    for i = 1, #atts - 1 do
+        local b = Instance.new("Beam")
+        b.Attachment0 = atts[i]
+        b.Attachment1 = atts[i + 1]
+        b.Width0 = 0.6
+        b.Width1 = 0.6
+        b.Color = ColorSequence.new(color)
+        b.Transparency = NumberSequence.new(0.05)
+        b.LightEmission = 0.7
+        b.Segments = 2
+        b.FaceCamera = true
+        b.Parent = Workspace.Terrain
+        table.insert(beams, b)
+    end
+    return beams, atts
+end
+
+local function glowLoop(beams)
+    task.spawn(function()
+        local info = TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+        for _, b in ipairs(beams) do
+            TweenService:Create(b, info, {LightEmission = 2}):Play()
+        end
+        while beams[1] and beams[1].Parent do
+            task.wait()
         end
     end)
-    yOffset = yOffset + 35
-    return box
 end
 
--- Create Toggles
-createToggle("Magnet", settings.magnet, function(state) settings.magnet = state end)
-createToggle("Auto Catch", settings.autoCatch, function(state) settings.autoCatch = state end)
-createToggle("Angle Enhancer", settings.angle, function(state) settings.angle = state end)
-createToggle("Freeze Tech", settings.freezeTech, function(state) settings.freezeTech = state end)
-createToggle("Ball ESP", settings.esp, function(state) settings.esp = state end)
-createToggle("Ball Path", settings.path, function(state) settings.path = state end)
-createToggle("Low Graphics", settings.lowGraphics, function(state) settings.lowGraphics = state end)
-createToggle("CFrame Speed", settings.cframeSpeedToggle, function(state) settings.cframeSpeedToggle = state end)
+local function ringMarker(pos, color)
+    local ring = Instance.new("Part")
+    ring.Anchored = true
+    ring.CanCollide = false
+    ring.Transparency = 1
+    ring.Size = Vector3.new(1, 0.1, 1)
+    ring.Position = pos + Vector3.new(0, 0.1, 0)
+    ring.Material = Enum.Material.Neon
+    ring.Color = color
+    ring.Name = "FF2_LandingRing"
+    ring.Parent = Workspace.Terrain
 
--- Create Sliders/TextBoxes
-local rangeBox = createSliderBox("Magnet Range", settings.range, 5, 80, function(val) settings.range = val end)
-local freezeBox = createSliderBox("Freeze Time (s)", settings.freezeTime, 1, 5, function(val) settings.freezeTime = val end)
-local cframeSpeedBox = createSliderBox("CFrame Speed", settings.cframeSpeed, 1, 80, function(val) settings.cframeSpeed = val end)
+    local mesh = Instance.new("SpecialMesh", ring)
+    mesh.MeshType = Enum.MeshType.Cylinder
+    mesh.Scale = Vector3.new(0.1, 0.05, 0.1)
 
--- FireTouchInterest Auto Catch + Freeze Tech
-task.spawn(function()
-    while true do
-        if settings.lowGraphics then
-            task.wait(1/30) -- limit to ~30 FPS
+    TweenService:Create(mesh, TweenInfo.new(1), {Scale = Vector3.new(8, 0.05, 8)}):Play()
+    TweenService:Create(ring, TweenInfo.new(1), {Transparency = 1}):Play()
+    task.delay(1, function() safeDestroy(ring) end)
+end
+
+local function addTrail(part)
+    if not part or not part:IsA("BasePart") then return end
+    local a0 = Instance.new("Attachment", part)
+    local a1 = Instance.new("Attachment")
+    a1.Parent = Workspace.Terrain
+    local beam = Instance.new("Beam")
+    beam.Attachment0 = a0
+    beam.Attachment1 = a1
+    beam.Width0 = 0.35
+    beam.Width1 = 0
+    beam.LightEmission = 1
+    beam.LightInfluence = 0
+    beam.Segments = 2
+    beam.Color = ColorSequence.new(Color3.fromRGB(255, 125, 0))
+    beam.Transparency = NumberSequence.new(0, 1)
+    beam.FaceCamera = true
+    beam.Parent = part
+
+    local con
+    con = RunService.Heartbeat:Connect(function()
+        if part and part.Parent == Workspace and part:IsA("BasePart") then
+            if part.Velocity.Magnitude > 0 then
+                a1.WorldPosition = part.Position - (part.Velocity.Magnitude > 0 and part.Velocity.Unit or Vector3.new()) * 2
+            end
         else
-            task.wait(0.05)
+            safeDestroy(beam)
+            safeDestroy(a0)
+            safeDestroy(a1)
+            if con then con:Disconnect() end
         end
-        if not settings.autoCatch then continue end
+    end)
+end
 
-        local ball = workspace:FindFirstChild("Football") or workspace:FindFirstChildWhichIsA("Part", true)
-        local char = player.Character
-        if not (ball and char and char:FindFirstChild("HumanoidRootPart")) then continue end
+local function fadeOutBeams(beams, duration)
+    task.spawn(function()
+        local steps = 20
+        for step = 1, steps do
+            local t = step / steps
+            for _, b in ipairs(beams) do
+                b.Transparency = NumberSequence.new(t)
+            end
+            task.wait(duration / steps)
+        end
+        for _, b in ipairs(beams) do
+            b.Transparency = NumberSequence.new(1)
+        end
+    end)
+end
 
-        local dist = (ball.Position - char.HumanoidRootPart.Position).Magnitude
-        if dist <= settings.range then
-            for _, handName in {"CatchLeft", "CatchRight"} do
-                local hand = char:FindFirstChild(handName)
-                if hand then
-                    pcall(function()
-                        firetouchinterest(ball, hand, 0)
-                        firetouchinterest(ball, hand, 1)
-                    end)
+-- ====== BALL ESP ======
+local function createESP(ball)
+    if espObjects[ball] then return end
+    local adorn = Instance.new("BillboardGui")
+    adorn.Adornee = ball
+    adorn.AlwaysOnTop = true
+    adorn.Size = UDim2.new(0, 100, 0, 30)
+    adorn.StudsOffset = Vector3.new(0, 2, 0)
+    adorn.Name = "FF2_BallESP_Gui"
+    local label = Instance.new("TextLabel", adorn)
+    label.Size = UDim2.fromScale(1, 1)
+    label.BackgroundTransparency = 1
+    label.TextScaled = true
+    label.Font = Enum.Font.Code
+    label.Text = "Ball"
+    label.TextColor3 = config.ESPColor
+    label.TextStrokeTransparency = 0.5
+    label.RichText = false
+    adorn.Parent = PlayerGui
+
+    espObjects[ball] = {gui = adorn, connection = nil}
+    espObjects[ball].connection = ball.AncestryChanged:Connect(function(_, parent)
+        if not parent then
+            if espObjects[ball] then
+                safeDestroy(espObjects[ball].gui)
+                if espObjects[ball].connection then espObjects[ball].connection:Disconnect() end
+                espObjects[ball] = nil
+            end
+        end
+    end)
+end
+
+local function updateESPVisibility()
+    for _, data in pairs(espObjects) do
+        if config.BallESPEnabled then
+            data.gui.Enabled = true
+        else
+            data.gui.Enabled = false
+        end
+    end
+end
+
+-- ====== MAGNET ======
+local function applyMagnet(ball)
+    if not config.MagnetEnabled then return end
+    if not ball or not ball:IsA("BasePart") then return end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = LocalPlayer.Character.HumanoidRootPart
+    local distance = (ball.Position - hrp.Position).Magnitude
+    if distance > config.MagnetRange then return end
+
+    local direction = (hrp.Position - ball.Position).Unit
+    local force = math.clamp(config.MagnetStrength * 50, 0, 500)
+    local currentY = ball.AssemblyLinearVelocity.Y * 0.3
+    ball.AssemblyLinearVelocity = direction * force + Vector3.new(0, currentY, 0)
+end
+
+-- ====== PULL VECTOR (basic directional influence) ======
+local function applyPullVector(ball)
+    if not config.PullVectorEnabled then return end
+    if not ball or not ball:IsA("BasePart") then return end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = LocalPlayer.Character.HumanoidRootPart
+    local toBall = ball.Position - hrp.Position
+    local influence = toBall.Unit * config.PullVectorStrength * 0.1
+    -- subtle nudge along vector (can be adapted to your system)
+    ball.AssemblyLinearVelocity = ball.AssemblyLinearVelocity + influence
+end
+
+-- ====== AUTO CATCH ======
+local function tryAutoCatch()
+    if not config.AutoCatch then return end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = LocalPlayer.Character.HumanoidRootPart
+    for _, obj in pairs(Workspace:GetChildren()) do
+        if obj.Name == config.MagnetTargetName and obj:IsA("BasePart") then
+            local dist = (obj.Position - hrp.Position).Magnitude
+            if dist <= config.MagnetRange then
+                applyMagnet(obj)
+            end
+        end
+    end
+end
+
+-- ====== AUTO RUSH ======
+local function tryAutoRush()
+    if not config.AutoRush then return end
+    if tick() - lastRush < config.RushCooldown then return end
+    if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = LocalPlayer.Character.HumanoidRootPart
+    for _, obj in pairs(Workspace:GetChildren()) do
+        if obj.Name == "Football" and obj:IsA("BasePart") then
+            local dist = (obj.Position - hrp.Position).Magnitude
+            if dist <= config.RushDistance then
+                local look = hrp.CFrame.LookVector
+                hrp.Velocity = look * 60
+                lastRush = tick()
+                break
+            end
+        end
+    end
+end
+
+-- ====== PREDICTION HANDLER ======
+local function handleFootballPrediction(ball)
+    if not ball or not ball:IsA("BasePart") then return end
+    if predictionCache[ball] then return end
+    predictionCache[ball] = true
+
+    if not config.LandingPredictionEnabled then
+        predictionCache[ball] = nil
+        return
+    end
+
+    local velocity = ball.AssemblyLinearVelocity
+    local points, landing = getTrajectory(ball.Position, velocity)
+    local beams, atts = makeArc(points, config.PredictionColor)
+    glowLoop(beams)
+    ringMarker(landing, config.PredictionColor)
+    if config.UseTrail then
+        addTrail(ball)
+    end
+
+    local con
+    con = RunService.Heartbeat:Connect(function()
+        if not ball or not ball.Parent then
+            fadeOutBeams(beams, 0.6)
+            for _, a in ipairs(atts) do safeDestroy(a) end
+            if con then con:Disconnect() end
+            predictionCache[ball] = nil
+            return
+        end
+        if ball.Velocity.Magnitude < 1 then
+            if config.LandingPredictionEnabled then
+                fadeOutBeams(beams, 0.8)
+            else
+                for _, b in ipairs(beams) do
+                    b.Transparency = NumberSequence.new(1)
                 end
             end
+            for _, a in ipairs(atts) do safeDestroy(a) end
+            if con then con:Disconnect() end
+            predictionCache[ball] = nil
+        end
+    end)
+end
 
-            if settings.freezeTech and char.HumanoidRootPart.Anchored == false then
-                char.HumanoidRootPart.Anchored = true
-                task.delay(settings.freezeTime, function()
-                    if char and char:FindFirstChild("HumanoidRootPart") then
-                        char.HumanoidRootPart.Anchored = false
+-- ====== WORLD MONITOR ======
+workspace.ChildAdded:Connect(function(child)
+    if child.Name == "Football" and child:IsA("BasePart") then
+        task.wait()
+        if config.BallESPEnabled then createESP(child) end
+        if config.LandingPredictionEnabled then handleFootballPrediction(child) end
+    end
+end)
+
+-- Handle existing footballs on execution
+for _, obj in pairs(Workspace:GetChildren()) do
+    if obj.Name == "Football" and obj:IsA("BasePart") then
+        if config.BallESPEnabled then createESP(obj) end
+        if config.LandingPredictionEnabled then handleFootballPrediction(obj) end
+    end
+end
+
+-- ====== MAIN LOOP ======
+task.spawn(function()
+    while true do
+        tryAutoCatch()
+        tryAutoRush()
+
+        for _, obj in pairs(Workspace:GetChildren()) do
+            if obj.Name == "Football" and obj:IsA("BasePart") then
+                if config.MagnetEnabled then
+                    applyMagnet(obj)
+                end
+                if config.PullVectorEnabled then
+                    applyPullVector(obj)
+                end
+                if config.BallESPEnabled then
+                    createESP(obj)
+                end
+                if config.LandingPredictionEnabled then
+                    handleFootballPrediction(obj)
+                end
+            end
+        end
+
+        updateESPVisibility()
+        task.wait(0.1)
+    end
+end)
+
+-- ====== GUI HELPERS ======
+local function createToggle(parent, name, initial, callback)
+    local container = Instance.new("Frame", parent)
+    container.Size = UDim2.new(1, -16, 0, 28)
+    container.BackgroundTransparency = 1
+
+    local label = Instance.new("TextLabel", container)
+    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextSize = 14
+    label.Font = Enum.Font.Code
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local button = Instance.new("TextButton", container)
+    button.Size = UDim2.new(0.35, 0, 1, 0)
+    button.Position = UDim2.new(0.65, 0, 0, 0)
+    button.Text = initial and "ON" or "OFF"
+    button.Font = Enum.Font.Code
+    button.TextSize = 14
+    button.AutoButtonColor = false
+    button.BackgroundColor3 = initial and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(120, 50, 50)
+    button.TextColor3 = Color3.new(1,1,1)
+    local state = initial
+    button.MouseButton1Click:Connect(function()
+        state = not state
+        button.Text = state and "ON" or "OFF"
+        button.BackgroundColor3 = state and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(120, 50, 50)
+        callback(state)
+    end)
+    return container
+end
+
+local function createSlider(parent, name, min, max, initial, callback)
+    local container = Instance.new("Frame", parent)
+    container.Size = UDim2.new(1, -16, 0, 36)
+    container.BackgroundTransparency = 1
+
+    local label = Instance.new("TextLabel", container)
+    label.Size = UDim2.new(1, 0, 0, 16)
+    label.BackgroundTransparency = 1
+    label.Text = name .. ": " .. tostring(initial)
+    label.TextSize = 13
+    label.Font = Enum.Font.Code
+    label.TextColor3 = Color3.new(1,1,1)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local sliderFrame = Instance.new("Frame", container)
+    sliderFrame.Size = UDim2.new(1, 0, 0, 16)
+    sliderFrame.Position = UDim2.new(0, 0, 0, 18)
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(45,45,45)
+    sliderFrame.BorderSizePixel = 0
+
+    local fill = Instance.new("Frame", sliderFrame)
+    fill.Size = UDim2.new((initial - min) / (max - min), 0, 1, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(100,100,100)
+    fill.BorderSizePixel = 0
+
+    local dragging = false
+    sliderFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+        end
+    end)
+    sliderFrame.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    sliderFrame.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local abs = input.Position.X - sliderFrame.AbsolutePosition.X
+            local frac = math.clamp(abs / sliderFrame.AbsoluteSize.X, 0, 1)
+            fill.Size = UDim2.new(frac, 0, 1, 0)
+            local value = min + (max - min) * frac
+            label.Text = name .. ": " .. string.format("%.2f", value)
+            callback(value)
+        end
+    end)
+    return container
+end
+
+-- ====== GUI BUILD ======
+local function buildGUI()
+    -- clean prior
+    local existing = PlayerGui:FindFirstChild("FF2_Hub_GUI")
+    if existing then safeDestroy(existing) end
+
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "FF2_Hub_GUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = PlayerGui
+
+    local main = Instance.new("Frame")
+    main.Size = UDim2.new(0, 360, 0, 520)
+    main.Position = UDim2.new(0.35, 0, 0.25, 0)
+    main.BackgroundColor3 = Color3.fromRGB(25,25,25)
+    main.BorderSizePixel = 0
+    main.Parent = screenGui
+    main.Name = "MainFrame"
+    main.ClipsDescendants = true
+
+    -- dragging
+    do
+        local dragging, dragInput, dragStart, startPos
+        local function update(input)
+            local delta = input.Position - dragStart
+            main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+        main.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                dragStart = input.Position
+                startPos = main.Position
+                input.Changed:Connect(function()
+                    if input.UserInputState == Enum.UserInputState.End then
+                        dragging = false
                     end
                 end)
             end
+        end)
+        UserInputService.InputChanged:Connect(function(input)
+            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                update(input)
+            end
+        end)
+    end
+
+    local title = Instance.new("TextLabel", main)
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.Position = UDim2.new(0, 0, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.Code
+    title.TextSize = 18
+    title.Text = "FF2 Hub"
+    title.TextColor3 = Color3.new(1,1,1)
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local content = Instance.new("Frame", main)
+    content.Size = UDim2.new(1, -14, 1, -40)
+    content.Position = UDim2.new(0, 7, 0, 34)
+    content.BackgroundTransparency = 1
+
+    local yOffset = 0
+    local function add(item)
+        item.Position = UDim2.new(0, 8, 0, yOffset)
+        item.Parent = content
+        yOffset = yOffset + item.Size.Y.Offset + 6
+    end
+
+    -- Toggles/sliders
+    add(createToggle(content, "Magnet", config.MagnetEnabled, function(v) config.MagnetEnabled = v end))
+    add(createSlider(content, "Magnet Range", 1, 100, config.MagnetRange, function(v) config.MagnetRange = v end))
+    add(createSlider(content, "Magnet Strength", 0.1, 5, config.MagnetStrength, function(v) config.MagnetStrength = v end))
+
+    add(createToggle(content, "Pull Vector", config.PullVectorEnabled, function(v) config.PullVectorEnabled = v end))
+    add(createSlider(content, "Pull Vector Strength", 0, 80, config.PullVectorStrength, function(v) config.PullVectorStrength = v end))
+
+    add(createToggle(content, "Ball ESP", config.BallESPEnabled, function(v) config.BallESPEnabled = v end))
+    add(createToggle(content, "Landing Prediction", config.LandingPredictionEnabled, function(v) config.LandingPredictionEnabled = v end))
+    add(createToggle(content, "Trail On Ball", config.UseTrail, function(v) config.UseTrail = v end))
+
+    add(createToggle(content, "Auto Catch", config.AutoCatch, function(v) config.AutoCatch = v end))
+    add(createToggle(content, "Auto Rush", config.AutoRush, function(v) config.AutoRush = v end))
+    add(createSlider(content, "Rush Distance", 5, 100, config.RushDistance, function(v) config.RushDistance = v end))
+    add(createSlider(content, "Rush Cooldown", 0.2, 3, config.RushCooldown, function(v) config.RushCooldown = v end))
+end
+
+-- build GUI initially
+buildGUI()
+
+-- toggle GUI visibility with RightShift
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        local gui = PlayerGui:FindFirstChild("FF2_Hub_GUI")
+        if gui then
+            gui.Enabled = not gui.Enabled
         end
     end
 end)
-
--- Ball ESP
-RunService.RenderStepped:Connect(function()
-    local ball = workspace:FindFirstChild("Football")
-    if settings.esp and ball and not ball:FindFirstChild("Highlight") then
-        local h = Instance.new("Highlight", ball)
-        h.FillColor = Color3.fromRGB(255, 255, 0)
-        h.OutlineColor = Color3.fromRGB(255, 0, 0)
-        h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    end
-end)
-
--- Ball Path Visualizer
-local ballPathLine = nil
-RunService.RenderStepped:Connect(function()
-    local ball = workspace:FindFirstChild("Football")
-    if settings.path and ball and ball:IsA("BasePart") then
-        if not ballPathLine then
-            ballPathLine = Instance.new("Part")
-            ballPathLine.Name = "BallPathLine"
-            ballPathLine.Anchored = true
-            ballPathLine.CanCollide = false
-            ballPathLine.Transparency = 0.5
-            ballPathLine.Material = Enum.Material.Neon
-            ballPathLine.Color = Color3.fromRGB(0, 255, 255)
-            ballPathLine.Parent = workspace
-        end
-
-        local char = player.Character
-        if char and char:FindFirstChild("HumanoidRootPart") then
-            local startPos = ball.Position
-            local endPos = char.HumanoidRootPart.Position
-            local dist = (endPos - startPos).Magnitude
-            ballPathLine.Size = Vector3.new(0.2, 0.2, dist)
-            ballPathLine.CFrame = CFrame.new(startPos, endPos) * CFrame.new(0, 0, -dist/2)
-            ballPathLine.Transparency = 0 -- visible
-        end
-    else
-        if ballPathLine then
-            ballPathLine.Transparency = 1 -- hide when disabled or no ball
-        end
-    end
-end)
-
--- Angle Enhancer stub (you can expand this later if needed)
-
--- CFrame Speed application (example usage: adjust character's HumanoidRootPart CFrame lerp speed)
-local lastTick = tick()
-RunService.RenderStepped:Connect(function()
-    if settings.cframeSpeedToggle then
-        local char = player.Character
-        if char and char:FindFirstChild("HumanoidRootPart") and mouse.Target then
-            local hrp = char.HumanoidRootPart
-            local targetCFrame = CFrame.new(hrp.Position, mouse.Hit.Position)
-            -- Lerp towards mouse direction based on speed setting and delta time
-            local dt = tick() - lastTick
-            lastTick = tick()
-            hrp.CFrame = hrp.CFrame:Lerp(targetCFrame, math.clamp(settings.cframeSpeed * dt * 0.1, 0, 1))
-        end
-    end
-end)
-
--- GUI Toggle Key (B)
-UserInputService.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.B then
-        guiToggled = not guiToggled
-        frame.Visible = guiToggled
-    end
-end)
-
--- Toggle Menu Button top-right
-local toggleBtn = Instance.new("TextButton")
-toggleBtn.Name = "ToggleMenuButton"
-toggleBtn.Text = "Toggle Menu"
-toggleBtn.Size = UDim2.new(0, 120, 0, 35)
-toggleBtn.Position = UDim2.new(1, -130, 0, 10) -- top right corner
-toggleBtn.AnchorPoint = Vector2.new(0, 0)
-toggleBtn.Parent = screenGui
-toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-toggleBtn.BackgroundTransparency = 0.3
-toggleBtn.TextColor3 = Color3.new(1,1,1)
-toggleBtn.Font = Enum.Font.GothamSemibold
-toggleBtn.TextSize = 14
-toggleBtn.MouseButton1Click:Connect(function()
-    guiToggled = not guiToggled
-    frame.Visible = guiToggled
-end)
-
-print("FF2 Script Loaded - Low Graphics & CFrame Speed Added")
