@@ -1,19 +1,18 @@
--- == FF2 HUB SCRIPT: Rayfield + Lua Hub + All Features Toggleable ==
--- Integrated per request. Draggable fallback GUI + Rayfield if present.
+-- FF2 FULL SCRIPT WITH LOW GRAPHICS TOGGLE AND MORE
+-- Features: Magnet, Pull Vector, Ball ESP, Landing Prediction, Trail, Auto Catch, Auto Rush, Long Arms, Low Graphics toggle
 
--- ====== SERVICES ======
+-- SERVICES
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
 local Workspace = workspace
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local Mouse = LocalPlayer:GetMouse()
 
--- ====== CONFIG ======
+-- CONFIG
 local config = {
     MagnetEnabled = true,
     MagnetRange = 60,
@@ -27,29 +26,70 @@ local config = {
     AutoRush = false,
     RushDistance = 30,
     RushCooldown = 1.2,
+    ArmLength = 20,
+    LowGraphicsEnabled = false,
     PredictionColor = Color3.fromRGB(255, 125, 0),
     ESPColor = Color3.fromRGB(0, 255, 125),
     MagnetTargetName = "Football",
 }
 
--- ====== TRAJECTORY CONSTANTS ======
-local Gravity = Vector3.new(0, -28, 0)
-local SegmentCount = 160
-local TimeStep = 0.035
+-- Store original lighting settings for low graphics toggle revert
+local originalLighting = {
+    GlobalShadows = Lighting.GlobalShadows,
+    Brightness = Lighting.Brightness,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    FogEnd = Lighting.FogEnd,
+}
 
--- ====== STATE ======
+local function enableLowGraphics()
+    Lighting.GlobalShadows = false
+    Lighting.Brightness = 1
+    Lighting.OutdoorAmbient = Color3.new(0.2, 0.2, 0.2)
+    Lighting.FogEnd = 1e6
+end
+
+local function disableLowGraphics()
+    Lighting.GlobalShadows = originalLighting.GlobalShadows
+    Lighting.Brightness = originalLighting.Brightness
+    Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
+    Lighting.FogEnd = originalLighting.FogEnd
+end
+
 local lastRush = 0
 local espObjects = {}
 local predictionCache = {}
 
--- ====== UTIL ======
+-- LONG ARMS FUNCTION
+local voidChar = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local function applyLongArms()
+    if voidChar then
+        local l = voidChar:FindFirstChild("Left Arm") or voidChar:FindFirstChild("LeftUpperArm")
+        local r = voidChar:FindFirstChild("Right Arm") or voidChar:FindFirstChild("RightUpperArm")
+        if l and r and l:IsA("BasePart") and r:IsA("BasePart") then
+            l.Size = Vector3.new(1, config.ArmLength, 1)
+            r.Size = Vector3.new(1, config.ArmLength, 1)
+        end
+    end
+end
+LocalPlayer.CharacterAdded:Connect(function(c)
+    voidChar = c
+end)
+RunService.Heartbeat:Connect(function()
+    applyLongArms()
+end)
+
+-- UTILS
 local function safeDestroy(obj)
-    if obj and pcall(function() return obj.Destroy end) then
+    if obj and obj.Destroy then
         pcall(function() obj:Destroy() end)
     end
 end
 
--- ====== TRAJECTORY HELPERS ======
+-- TRAJECTORY HELPERS
+local Gravity = Vector3.new(0, -28, 0)
+local SegmentCount = 160
+local TimeStep = 0.035
+
 local function getTrajectory(startPos, velocity)
     local pos, vel = startPos, velocity
     local points = {pos}
@@ -169,7 +209,7 @@ local function fadeOutBeams(beams, duration)
     end)
 end
 
--- ====== BALL ESP ======
+-- BALL ESP
 local function createESP(ball)
     if espObjects[ball] then return end
     local adorn = Instance.new("BillboardGui")
@@ -203,15 +243,11 @@ end
 
 local function updateESPVisibility()
     for _, data in pairs(espObjects) do
-        if config.BallESPEnabled then
-            data.gui.Enabled = true
-        else
-            data.gui.Enabled = false
-        end
+        data.gui.Enabled = config.BallESPEnabled
     end
 end
 
--- ====== MAGNET ======
+-- MAGNET
 local function applyMagnet(ball)
     if not config.MagnetEnabled then return end
     if not ball or not ball:IsA("BasePart") then return end
@@ -219,14 +255,13 @@ local function applyMagnet(ball)
     local hrp = LocalPlayer.Character.HumanoidRootPart
     local distance = (ball.Position - hrp.Position).Magnitude
     if distance > config.MagnetRange then return end
-
     local direction = (hrp.Position - ball.Position).Unit
-    local force = math.clamp(config.MagnetStrength * 50, 0, 500)
+    local force = math.clamp(config.MagnetStrength * 500, 0, 1000) -- increased for OP magnet
     local currentY = ball.AssemblyLinearVelocity.Y * 0.3
     ball.AssemblyLinearVelocity = direction * force + Vector3.new(0, currentY, 0)
 end
 
--- ====== PULL VECTOR ======
+-- PULL VECTOR
 local function applyPullVector(ball)
     if not config.PullVectorEnabled then return end
     if not ball or not ball:IsA("BasePart") then return end
@@ -237,7 +272,7 @@ local function applyPullVector(ball)
     ball.AssemblyLinearVelocity = ball.AssemblyLinearVelocity + influence
 end
 
--- ====== AUTO CATCH ======
+-- AUTO CATCH
 local function tryAutoCatch()
     if not config.AutoCatch then return end
     if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
@@ -252,7 +287,7 @@ local function tryAutoCatch()
     end
 end
 
--- ====== AUTO RUSH ======
+-- AUTO RUSH
 local function tryAutoRush()
     if not config.AutoRush then return end
     if tick() - lastRush < config.RushCooldown then return end
@@ -271,7 +306,7 @@ local function tryAutoRush()
     end
 end
 
--- ====== PREDICTION HANDLER ======
+-- PREDICTION HANDLER
 local function handleFootballPrediction(ball)
     if not ball or not ball:IsA("BasePart") then return end
     if predictionCache[ball] then return end
@@ -315,7 +350,7 @@ local function handleFootballPrediction(ball)
     end)
 end
 
--- ====== WORLD MONITOR ======
+-- WORLD MONITOR
 workspace.ChildAdded:Connect(function(child)
     if child.Name == "Football" and child:IsA("BasePart") then
         task.wait()
@@ -331,7 +366,7 @@ for _, obj in pairs(Workspace:GetChildren()) do
     end
 end
 
--- ====== MAIN LOOP ======
+-- MAIN LOOP
 task.spawn(function()
     while true do
         tryAutoCatch()
@@ -345,18 +380,19 @@ task.spawn(function()
             end
         end
         updateESPVisibility()
-        task.wait(0.1)
+        RunService.Heartbeat:Wait()
     end
 end)
 
--- ====== LUA HUB GUI (fallback or separate) ======
+-- GUI HELPERS
 local function createToggle(parent, name, initial, callback)
     local container = Instance.new("Frame", parent)
-    container.Size = UDim2.new(1, -14, 0, 26)
+    container.Size = UDim2.new(1, -12, 0, 24)
     container.BackgroundTransparency = 1
 
     local label = Instance.new("TextLabel", container)
-    label.Size = UDim2.new(0.6, 0, 1, 0)
+    label.Size = UDim2.new(0.58, 0, 1, 0)
+    label.Position = UDim2.new(0, 0, 0, 0)
     label.BackgroundTransparency = 1
     label.Text = name
     label.Font = Enum.Font.Code
@@ -364,20 +400,20 @@ local function createToggle(parent, name, initial, callback)
     label.TextColor3 = Color3.new(1,1,1)
     label.TextXAlignment = Enum.TextXAlignment.Left
 
-    local btn = Instance.new("TextButton", container)
-    btn.Size = UDim2.new(0.35, 0, 1, 0)
-    btn.Position = UDim2.new(0.65, 0, 0, 0)
-    btn.Text = initial and "ON" or "OFF"
-    btn.Font = Enum.Font.Code
-    btn.TextSize = 14
-    btn.AutoButtonColor = false
-    btn.BackgroundColor3 = initial and Color3.fromRGB(50,150,50) or Color3.fromRGB(120,50,50)
-    btn.TextColor3 = Color3.new(1,1,1)
+    local button = Instance.new("TextButton", container)
+    button.Size = UDim2.new(0.35, 0, 1, 0)
+    button.Position = UDim2.new(0.65, 0, 0, 0)
+    button.Text = initial and "ON" or "OFF"
+    button.Font = Enum.Font.Code
+    button.TextSize = 14
+    button.AutoButtonColor = false
+    button.BackgroundColor3 = initial and Color3.fromRGB(50,150,50) or Color3.fromRGB(150,50,50)
+    button.TextColor3 = Color3.new(1,1,1)
     local state = initial
-    btn.MouseButton1Click:Connect(function()
+    button.MouseButton1Click:Connect(function()
         state = not state
-        btn.Text = state and "ON" or "OFF"
-        btn.BackgroundColor3 = state and Color3.fromRGB(50,150,50) or Color3.fromRGB(120,50,50)
+        button.Text = state and "ON" or "OFF"
+        button.BackgroundColor3 = state and Color3.fromRGB(50,150,50) or Color3.fromRGB(150,50,50)
         callback(state)
     end)
     return container
@@ -385,21 +421,21 @@ end
 
 local function createSlider(parent, name, min, max, initial, callback)
     local container = Instance.new("Frame", parent)
-    container.Size = UDim2.new(1, -14, 0, 36)
+    container.Size = UDim2.new(1, -12, 0, 34)
     container.BackgroundTransparency = 1
 
     local label = Instance.new("TextLabel", container)
     label.Size = UDim2.new(1, 0, 0, 16)
     label.BackgroundTransparency = 1
-    label.Text = name..": "..tostring(initial)
+    label.Text = name .. ": " .. tostring(initial)
     label.Font = Enum.Font.Code
     label.TextSize = 13
     label.TextColor3 = Color3.new(1,1,1)
     label.TextXAlignment = Enum.TextXAlignment.Left
 
     local bar = Instance.new("Frame", container)
-    bar.Size = UDim2.new(1, 0, 0, 16)
-    bar.Position = UDim2.new(0,0,0,18)
+    bar.Size = UDim2.new(1, 0, 0, 14)
+    bar.Position = UDim2.new(0, 0, 0, 18)
     bar.BackgroundColor3 = Color3.fromRGB(45,45,45)
     bar.BorderSizePixel = 0
 
@@ -410,153 +446,3 @@ local function createSlider(parent, name, min, max, initial, callback)
 
     local dragging = false
     bar.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
-    end)
-    bar.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
-    bar.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local absX = input.Position.X - bar.AbsolutePosition.X
-            local frac = math.clamp(absX / bar.AbsoluteSize.X, 0, 1)
-            fill.Size = UDim2.new(frac, 0, 1, 0)
-            local value = min + (max - min)*frac
-            label.Text = name..": "..string.format("%.2f", value)
-            callback(value)
-        end
-    end)
-    return container
-end
-
-local function buildLuaHub()
-    local existing = PlayerGui:FindFirstChild("FF2_LuaHub")
-    if existing then safeDestroy(existing) end
-
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "FF2_LuaHub"
-    gui.ResetOnSpawn = false
-    gui.Parent = PlayerGui
-
-    local main = Instance.new("Frame")
-    main.Size = UDim2.new(0, 340, 0, 500)
-    main.Position = UDim2.new(0.3, 0, 0.2, 0)
-    main.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    main.BorderSizePixel = 0
-    main.Parent = gui
-    main.Name = "HubFrame"
-    main.ClipsDescendants = true
-
-    -- draggable
-    do
-        local dragging, dragStart, startPos
-        main.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                dragging = true
-                dragStart = input.Position
-                startPos = main.Position
-                input.Changed:Connect(function()
-                    if input.UserInputState == Enum.UserInputState.End then dragging = false end
-                end)
-            end
-        end)
-        UserInputService.InputChanged:Connect(function(input)
-            if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-                local delta = input.Position - dragStart
-                main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            end
-        end)
-    end
-
-    local title = Instance.new("TextLabel", main)
-    title.Size = UDim2.new(1, 0, 0, 28)
-    title.Position = UDim2.new(0,0,0,0)
-    title.BackgroundTransparency = 1
-    title.Font = Enum.Font.Code
-    title.TextSize = 18
-    title.Text = "FF2 Hub"
-    title.TextColor3 = Color3.new(1,1,1)
-    title.TextXAlignment = Enum.TextXAlignment.Left
-
-    local container = Instance.new("Frame", main)
-    container.Size = UDim2.new(1, -12, 1, -36)
-    container.Position = UDim2.new(0,6,0,32)
-    container.BackgroundTransparency = 1
-
-    local y = 0
-    local function add(child)
-        child.Position = UDim2.new(0, 8, 0, y)
-        child.Parent = container
-        y = y + child.Size.Y.Offset + 6
-    end
-
-    add(createToggle(container, "Magnet", config.MagnetEnabled, function(v) config.MagnetEnabled = v end))
-    add(createSlider(container, "Magnet Range", 1, 100, config.MagnetRange, function(v) config.MagnetRange = v end))
-    add(createSlider(container, "Magnet Strength", 0.1, 5, config.MagnetStrength, function(v) config.MagnetStrength = v end))
-
-    add(createToggle(container, "Pull Vector", config.PullVectorEnabled, function(v) config.PullVectorEnabled = v end))
-    add(createSlider(container, "Pull Vector Strength", 0, 80, config.PullVectorStrength, function(v) config.PullVectorStrength = v end))
-
-    add(createToggle(container, "Ball ESP", config.BallESPEnabled, function(v) config.BallESPEnabled = v end))
-    add(createToggle(container, "Landing Prediction", config.LandingPredictionEnabled, function(v) config.LandingPredictionEnabled = v end))
-    add(createToggle(container, "Trail", config.UseTrail, function(v) config.UseTrail = v end))
-
-    add(createToggle(container, "Auto Catch", config.AutoCatch, function(v) config.AutoCatch = v end))
-    add(createToggle(container, "Auto Rush", config.AutoRush, function(v) config.AutoRush = v end))
-    add(createSlider(container, "Rush Distance", 5, 100, config.RushDistance, function(v) config.RushDistance = v end))
-    add(createSlider(container, "Rush Cooldown", 0.2, 3, config.RushCooldown, function(v) config.RushCooldown = v end))
-end
-
--- build fallback hub immediately
-buildLuaHub()
-
--- ====== RAYFIELD GUI LOADER (separate) ======
--- Attempt to load Rayfield; if you have your own Rayfield loader replace the URL accordingly.
-local successRay, Rayfield = pcall(function()
-    -- Example public Rayfield loader; if blocked, swap with your locally stored Rayfield code
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/LucidXPro/Rayfield/main/source"))()
-end)
-
-if successRay and Rayfield then
-    local window = Rayfield:CreateWindow({
-        Name = "FF2 Hub",
-        LoadingTitle = "Football Fusion 2",
-        HidePremium = true,
-        ConfigurationSaving = {
-            Enabled = false
-        },
-    })
-
-    local mainTab = window:CreateTab("Main", nil)
-    local visualsTab = window:CreateTab("Visuals", nil)
-    local miscTab = window:CreateTab("Misc", nil)
-
-    -- Magnet group
-    local magnetSection = mainTab:CreateSection("Magnet")
-    mainTab:CreateToggle({
-        Name = "Enable Magnet",
-        CurrentValue = config.MagnetEnabled,
-        Flag = "MagnetEnabled",
-        Callback = function(v) config.MagnetEnabled = v end,
-    })
-    mainTab:CreateSlider({
-        Name = "Magnet Range",
-        Range = {1, 100},
-        Increment = 1,
-        Suffix = "",
-        CurrentValue = config.MagnetRange,
-        Flag = "MagnetRange",
-        Callback = function(v) config.MagnetRange = v end,
-    })
-    mainTab:CreateSlider({
-        Name = "Magnet Strength",
-        Range = {0.1, 5},
-        Increment = 0.1,
-        Suffix = "",
-        CurrentValue = config.MagnetStrength,
-        Flag = "MagnetStrength",
-        Callback = function(v) config.MagnetStrength = v end,
-    })
-
-    -- Pull vector
-    mainTab:CreateToggle({
-        Name = "Pull V
