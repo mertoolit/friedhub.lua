@@ -10,7 +10,7 @@ local function main()
 
     local settings = {
         magnetEnabled = true,
-        magnetMode = "Legit", -- Legit, Blatant, League
+        magnetMode = "Legit", -- Legit, Blatant, League (unused now but kept)
         autoCatch = true,
         freezeTech = false,
         freezeTime = 2,
@@ -22,7 +22,7 @@ local function main()
         angleEnhancer = true,
     }
 
-    -- Load settings from file (if supported)
+    -- Load settings from file (if available)
     pcall(function()
         if readfile and isfile and isfile(SETTINGS_KEY) then
             local loaded = HttpService:JSONDecode(readfile(SETTINGS_KEY))
@@ -193,7 +193,7 @@ local function main()
         return frame
     end
 
-    -- Magnet Tab Controls
+    -- Tabs: Magnet
     createToggle(pages["Magnet"], "Enable Magnet", settings.magnetEnabled, function(v) settings.magnetEnabled = v end)
 
     do
@@ -224,7 +224,7 @@ local function main()
     createSlider(pages["Magnet"], "Magnet Range", settings.magnetRange, 10, 80, function(v) settings.magnetRange = v end)
     createToggle(pages["Magnet"], "Angle Enhancer", settings.angleEnhancer, function(v) settings.angleEnhancer = v end)
 
-    -- Misc Tab Controls
+    -- Tabs: Misc
     createToggle(pages["Misc"], "Low Graphics", settings.lowGraphics, function(state)
         settings.lowGraphics = state
         saveSettings()
@@ -261,9 +261,11 @@ local function main()
         end
     end)
 
-    -- ESP Tab Controls
+    -- Tabs: ESP
     createToggle(pages["ESP"], "Ball ESP", settings.esp, function(v) settings.esp = v end)
     createToggle(pages["ESP"], "Ball Path Visualizer", settings.ballPath, function(v) settings.ballPath = v end)
+
+    -- Magnet & AutoCatch Logic
 
     local lastCatch = 0
     local catchCooldown = 0.25
@@ -278,31 +280,17 @@ local function main()
         return lookVector:Dot(dir) > 0.5
     end
 
+    -- Magnet logic (no firetouchinterest)
     RunService.Heartbeat:Connect(function()
-        if not settings.magnetEnabled and not settings.autoCatch then return end
+        if not settings.magnetEnabled then return end
         local ball = getBall()
         local char = player.Character
         if not ball or not char then return end
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
-        local now = tick()
-        if now - lastCatch < catchCooldown then return end
-
-        local ballVel = ball.AssemblyLinearVelocity
-        local gravity = workspace.Gravity or 196.2
-        local predictionTime = 0.15
-        local predictedPos = ball.Position + (ballVel * predictionTime) + Vector3.new(0, -0.5 * gravity * predictionTime^2, 0)
-
-        local distPredicted = (predictedPos - hrp.Position).Magnitude
-        local distCurrent = (ball.Position - hrp.Position).Magnitude
-
-        local facing = true
-        if settings.angleEnhancer then
-            facing = isFacingTarget(hrp.CFrame, predictedPos)
-        end
-
-        if settings.magnetEnabled and distPredicted <= settings.magnetRange and facing then
+        local dist = (ball.Position - hrp.Position).Magnitude
+        if dist <= settings.magnetRange then
             local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
             if not bv then
                 bv = Instance.new("BodyVelocity")
@@ -310,41 +298,25 @@ local function main()
                 bv.MaxForce = Vector3.new(1e5,1e5,1e5)
                 bv.Parent = ball
             end
-
-            if settings.magnetMode == "Legit" then
-                local catchPosLeft = char:FindFirstChild("CatchLeft")
-                local catchPosRight = char:FindFirstChild("CatchRight")
-                if catchPosLeft and catchPosRight then
-                    local targetPos = (catchPosLeft.Position + catchPosRight.Position) / 2
-                    local direction = (targetPos - ball.Position).Unit
-                    bv.Velocity = direction * 60
-                else
-                    bv.Velocity = (hrp.Position - ball.Position).Unit * 55
-                end
-            elseif settings.magnetMode == "Blatant" then
-                bv.Velocity = (hrp.Position - ball.Position).Unit * 150
-            elseif settings.magnetMode == "League" then
-                local baseVel = (hrp.Position - ball.Position).Unit * 90
-                local noise = Vector3.new(
-                    (math.random() - 0.5) * 5,
-                    (math.random() - 0.5) * 5,
-                    (math.random() - 0.5) * 5
-                )
-                bv.Velocity = baseVel + noise
+            -- Target between CatchLeft and CatchRight or just hrp
+            local catchLeft = char:FindFirstChild("CatchLeft")
+            local catchRight = char:FindFirstChild("CatchRight")
+            local targetPos
+            if catchLeft and catchRight then
+                targetPos = (catchLeft.Position + catchRight.Position) / 2
+            else
+                targetPos = hrp.Position
             end
+            bv.Velocity = (targetPos - ball.Position).Unit * 100
 
-            if settings.autoCatch and distCurrent <= 5 then
-                -- Replace firetouchinterest with safe proximity check (you can add your catch logic here)
-                local handNames = {"CatchLeft", "CatchRight"}
-                for _, handName in ipairs(handNames) do
-                    local hand = char:FindFirstChild(handName)
-                    if hand and (ball.Position - hand.Position).Magnitude <= 3 then
-                        -- Example: FireServer to catch (replace with your game's event)
-                        -- game:GetService("ReplicatedStorage").CatchEvent:FireServer()
-                    end
+            -- Auto catch simulation (simple proximity check, no firetouchinterest)
+            if settings.autoCatch and dist <= 5 then
+                local now = tick()
+                if now - lastCatch >= catchCooldown then
+                    lastCatch = now
+                    -- Could do more here, but skipping firetouchinterest for safety
                 end
-                lastCatch = now
-
+                -- Freeze tech
                 if settings.freezeTech and not hrp.Anchored then
                     hrp.Anchored = true
                     task.delay(settings.freezeTime, function()
@@ -359,6 +331,37 @@ local function main()
             if bv then bv:Destroy() end
         end
     end)
-end
 
-main()
+    -- Ball ESP logic
+    RunService.RenderStepped:Connect(function()
+        if not settings.esp then return end
+        local ball = getBall()
+        if ball and not ball:FindFirstChild("FriedHubHighlight") then
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "FriedHubHighlight"
+            highlight.FillColor = Color3.fromRGB(255, 255, 0)
+            highlight.OutlineColor = Color3.fromRGB(255, 140, 0)
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.Parent = ball
+        elseif ball and ball:FindFirstChild("FriedHubHighlight") then
+            ball.FriedHubHighlight.Enabled = settings.esp
+        end
+    end)
+
+    -- Ball Landing Prediction visualizer
+    local predictedParts = {}
+
+    RunService.RenderStepped:Connect(function()
+        if not settings.ballPath then
+            for _, part in pairs(predictedParts) do
+                part:Destroy()
+            end
+            predictedParts = {}
+            return
+        end
+
+        local ball = getBall()
+        if not ball then return end
+
+        -- Clean old parts
+        for _, part in pairs(pred
