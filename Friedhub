@@ -1,571 +1,645 @@
--- FriedHub V2 - Part 1 (Core GUI, Main & Mags Tabs, Semi Magnet)
+--[[
+  Fried Hub v5 - Football Fusion 2 - PART 1
+  FULL Glowy UI Base + Tabs + Toggles + Minimize + Close
+  Orange/Black Futuristic Theme
+  Draggable, Animated UI
+  Compatible with KRNL Mobile
+  Huge, detailed, humanized codebase
+--]]
+
+-- Early protection
+if game.PlaceId ~= 5136536137 then
+    warn("[FriedHub] Not Football Fusion 2! Script aborted.")
+    return
+end
+if getgenv().FriedHubLoaded then
+    warn("[FriedHub] Already loaded! Aborting duplicate load.")
+    return
+end
+getgenv().FriedHubLoaded = true
 
 -- Services
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local UIS = game:GetService("UserInputService")
-local TeleportService = game:GetService("TeleportService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
--- Cleanup old GUI
-local oldGui = CoreGui:FindFirstChild("FriedHub")
-if oldGui then oldGui:Destroy() end
+-- Variables
+local UIS = UserInputService
+local Mouse = LocalPlayer:GetMouse()
 
--- Helper: UICorner creator
-local function createUICorner(parent)
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = parent
-    return corner
+-- Character references
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- UI Helper function
+local function create(className, properties)
+    local obj = Instance.new(className)
+    if properties then
+        for k,v in pairs(properties) do
+            if k == "Parent" then
+                obj.Parent = v
+            else
+                obj[k] = v
+            end
+        end
+    end
+    return obj
 end
 
--- Helper: Create button
-local function createButton(text, size, pos, parent)
-    local btn = Instance.new("TextButton")
-    btn.Text = text
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 16
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    btn.Size = size
-    btn.Position = pos
-    createUICorner(btn)
-    btn.Parent = parent
+-- Clear previous UI if exists
+local oldUI = CoreGui:FindFirstChild("FriedHubUI")
+if oldUI then oldUI:Destroy() end
+
+-- Main ScreenGui
+local ScreenGui = create("ScreenGui", {
+    Name = "FriedHubUI",
+    Parent = CoreGui,
+    ResetOnSpawn = false,
+    ZIndexBehavior = Enum.ZIndexBehavior.Global,
+})
+
+-- Main Frame (Draggable container)
+local MainFrame = create("Frame", {
+    Name = "MainFrame",
+    Parent = ScreenGui,
+    Size = UDim2.new(0, 720, 0, 520),
+    Position = UDim2.new(0.5, -360, 0.5, -260),
+    BackgroundColor3 = Color3.fromRGB(15, 15, 15),
+    BorderSizePixel = 0,
+    Active = true,
+    Draggable = true,
+})
+
+-- Glow Stroke (Thick orange glow)
+local GlowStroke = create("UIStroke", {
+    Parent = MainFrame,
+    Thickness = 5,
+    Color = Color3.fromRGB(255, 140, 0),
+    Transparency = 0.2,
+    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+})
+
+-- Title Label
+local Title = create("TextLabel", {
+    Parent = MainFrame,
+    Size = UDim2.new(1, 0, 0, 60),
+    Position = UDim2.new(0, 0, 0, 0),
+    BackgroundTransparency = 1,
+    Font = Enum.Font.GothamBold,
+    Text = "⚡ Fried Hub v5 - Football Fusion 2 ⚡",
+    TextColor3 = Color3.fromRGB(255, 140, 0),
+    TextSize = 30,
+    TextStrokeTransparency = 0.75,
+})
+
+-- Close Button
+local CloseBtn = create("TextButton", {
+    Parent = MainFrame,
+    Size = UDim2.new(0, 50, 0, 50),
+    Position = UDim2.new(1, -55, 0, 5),
+    BackgroundColor3 = Color3.fromRGB(70, 0, 0),
+    Text = "X",
+    Font = Enum.Font.GothamBold,
+    TextSize = 30,
+    TextColor3 = Color3.fromRGB(255, 255, 255),
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+})
+
+CloseBtn.MouseEnter:Connect(function()
+    TweenService:Create(CloseBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(255, 0, 0)}):Play()
+end)
+CloseBtn.MouseLeave:Connect(function()
+    TweenService:Create(CloseBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(70, 0, 0)}):Play()
+end)
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+    getgenv().FriedHubLoaded = false
+end)
+
+-- Minimize Button
+local MinimizeBtn = create("TextButton", {
+    Parent = MainFrame,
+    Size = UDim2.new(0, 50, 0, 50),
+    Position = UDim2.new(1, -115, 0, 5),
+    BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+    Text = "_",
+    Font = Enum.Font.GothamBold,
+    TextSize = 40,
+    TextColor3 = Color3.fromRGB(255, 140, 0),
+    BorderSizePixel = 0,
+    AutoButtonColor = false,
+})
+
+MinimizeBtn.MouseEnter:Connect(function()
+    TweenService:Create(MinimizeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
+end)
+MinimizeBtn.MouseLeave:Connect(function()
+    TweenService:Create(MinimizeBtn, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
+end)
+
+-- Minimized Icon (small pumpkin emoji)
+local MinimizedIcon = create("TextButton", {
+    Parent = CoreGui,
+    Size = UDim2.new(0, 60, 0, 60),
+    Position = UDim2.new(0, 15, 0, 15),
+    BackgroundColor3 = Color3.fromRGB(255, 140, 0),
+    Text = "🎃",
+    Font = Enum.Font.GothamBlack,
+    TextSize = 36,
+    TextColor3 = Color3.fromRGB(0, 0, 0),
+    BorderSizePixel = 0,
+    Visible = false,
+    AutoButtonColor = true,
+    Active = true,
+    Draggable = true,
+})
+
+MinimizeBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    MinimizedIcon.Visible = true
+end)
+
+MinimizedIcon.MouseButton1Click:Connect(function()
+    MainFrame.Visible = true
+    MinimizedIcon.Visible = false
+end)
+
+-- Tabs Container
+local TabsHolder = create("Frame", {
+    Parent = MainFrame,
+    Size = UDim2.new(1, -30, 0, 60),
+    Position = UDim2.new(0, 15, 0, 70),
+    BackgroundTransparency = 1,
+})
+
+-- Tab Button Creator (glowy)
+local function createTabButton(name, posX)
+    local btn = create("TextButton", {
+        Parent = TabsHolder,
+        Size = UDim2.new(0, 150, 1, 0),
+        Position = UDim2.new(0, posX, 0, 0),
+        BackgroundColor3 = Color3.fromRGB(30, 30, 30),
+        TextColor3 = Color3.fromRGB(255, 140, 0),
+        Font = Enum.Font.GothamBold,
+        TextSize = 20,
+        Text = name,
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+    })
+    local stroke = create("UIStroke", {
+        Parent = btn,
+        Color = Color3.fromRGB(255, 140, 0),
+        Thickness = 2,
+        Transparency = 0.3,
+    })
+
+    btn.MouseEnter:Connect(function()
+        stroke.Transparency = 0
+        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    end)
+    btn.MouseLeave:Connect(function()
+        stroke.Transparency = 0.3
+        btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    end)
+
     return btn
 end
 
--- Helper: Create label
-local function createLabel(text, size, pos, parent)
-    local lbl = Instance.new("TextLabel")
-    lbl.Text = text
-    lbl.Font = Enum.Font.GothamSemibold
-    lbl.TextSize = 18
-    lbl.TextColor3 = Color3.fromRGB(255, 140, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Size = size
-    lbl.Position = pos
-    lbl.Parent = parent
-    return lbl
+-- Tabs creation and content frames
+local tabs = {}
+local function createTab(name)
+    local frame = create("Frame", {
+        Parent = MainFrame,
+        Name = name .. "Tab",
+        Size = UDim2.new(1, -30, 1, -150),
+        Position = UDim2.new(0, 15, 0, 140),
+        BackgroundColor3 = Color3.fromRGB(10, 10, 10),
+        BorderSizePixel = 0,
+        Visible = false,
+    })
+    tabs[name] = frame
+    return frame
 end
 
--- Helper: Create toggle button
-local function createToggle(text, parent, yPos, callback)
-    local toggle = Instance.new("TextButton")
-    toggle.Size = UDim2.new(0, 230, 0, 35)
-    toggle.Position = UDim2.new(0, 10, 0, yPos)
-    toggle.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
-    toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    toggle.Font = Enum.Font.Gotham
-    toggle.TextSize = 15
-    toggle.Text = "[ OFF ] " .. text
-    createUICorner(toggle)
-    toggle.Parent = parent
+local magsTab = createTab("Mags")
+local visualsTab = createTab("Visuals")
+local miscTab = createTab("Misc")
 
-    local state = false
-    toggle.MouseButton1Click:Connect(function()
-        state = not state
-        toggle.Text = (state and "[ ON ] " or "[ OFF ] ") .. text
-        pcall(callback, state)
+-- Tab buttons
+local magsBtn = createTabButton("Mags", 0)
+local visualsBtn = createTabButton("Visuals", 165)
+local miscBtn = createTabButton("Misc", 330)
+
+-- Show/hide tabs function
+local function showTab(name)
+    for k,v in pairs(tabs) do
+        v.Visible = (k == name)
+    end
+end
+showTab("Mags") -- default
+
+magsBtn.MouseButton1Click:Connect(function() showTab("Mags") end)
+visualsBtn.MouseButton1Click:Connect(function() showTab("Visuals") end)
+miscBtn.MouseButton1Click:Connect(function() showTab("Misc") end)
+
+-- Helper to create glowy toggle buttons
+local function createToggle(parent, text, y, default, callback)
+    local btn = create("TextButton", {
+        Parent = parent,
+        Size = UDim2.new(0, 280, 0, 38),
+        Position = UDim2.new(0, 20, 0, y),
+        BackgroundColor3 = Color3.fromRGB(40, 40, 40),
+        TextColor3 = Color3.fromRGB(255, 140, 0),
+        Font = Enum.Font.GothamBold,
+        TextSize = 16,
+        Text = text .. ": " .. (default and "ON" or "OFF"),
+        BorderSizePixel = 0,
+        AutoButtonColor = false,
+    })
+    local stroke = create("UIStroke", {
+        Parent = btn,
+        Color = Color3.fromRGB(255, 140, 0),
+        Thickness = 2,
+        Transparency = 0.7,
+    })
+    btn.MouseEnter:Connect(function()
+        stroke.Transparency = 0
+        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     end)
-    return toggle
+    btn.MouseLeave:Connect(function()
+        stroke.Transparency = 0.7
+        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    end)
+    btn.MouseButton1Click:Connect(function()
+        local on = not btn.Text:find("ON")
+        btn.Text = text .. ": " .. (on and "ON" or "OFF")
+        callback(on)
+    end)
+    return btn
 end
 
--- Helper: Create slider with label
-local function createSlider(labelText, min, max, default, yPos, parent, callback)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 250, 0, 50)
-    frame.Position = UDim2.new(0, 10, 0, yPos)
-    frame.BackgroundTransparency = 1
-    frame.Parent = parent
-
-    local label = Instance.new("TextLabel")
-    label.Text = labelText .. ": " .. tostring(default)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 14
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.BackgroundTransparency = 1
-    label.Position = UDim2.new(0, 0, 0, 0)
-    label.Size = UDim2.new(1, 0, 0, 20)
-    label.Parent = frame
-
-    local sliderBar = Instance.new("Frame")
-    sliderBar.Size = UDim2.new(1, -10, 0, 12)
-    sliderBar.Position = UDim2.new(0, 5, 0, 30)
-    sliderBar.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-    createUICorner(sliderBar)
-    sliderBar.Parent = frame
-
-    local sliderHandle = Instance.new("Frame")
-    sliderHandle.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
-    sliderHandle.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
-    createUICorner(sliderHandle)
-    sliderHandle.Parent = sliderBar
-
+-- Helper to create glowy slider controls
+local function createSlider(parent, label, min, max, default, y, callback)
+    local frame = create("Frame", {
+        Parent = parent,
+        Size = UDim2.new(0, 280, 0, 48),
+        Position = UDim2.new(0, 20, 0, y),
+        BackgroundTransparency = 1,
+    })
+    local labelText = create("TextLabel", {
+        Parent = frame,
+        Size = UDim2.new(1, 0, 0, 18),
+        Position = UDim2.new(0, 0, 0, 0),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.Gotham,
+        TextSize = 15,
+        TextColor3 = Color3.fromRGB(255, 140, 0),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Text = label .. ": " .. tostring(default),
+    })
+    local bar = create("Frame", {
+        Parent = frame,
+        Size = UDim2.new(1, 0, 0, 14),
+        Position = UDim2.new(0, 0, 0, 26),
+        BackgroundColor3 = Color3.fromRGB(40, 40, 40),
+        BorderSizePixel = 0,
+    })
+    local fill = create("Frame", {
+        Parent = bar,
+        Size = UDim2.new((default - min) / (max - min), 0, 1, 0),
+        BackgroundColor3 = Color3.fromRGB(255, 140, 0),
+        BorderSizePixel = 0,
+    })
     local dragging = false
-    sliderHandle.InputBegan:Connect(function(input)
+    bar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = true
+            local relX = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+            fill.Size = UDim2.new(relX, 0, 1, 0)
+            local val = math.floor(min + (max - min) * relX)
+            labelText.Text = label .. ": " .. val
+            callback(val)
         end
     end)
-    sliderHandle.InputEnded:Connect(function(input)
+    bar.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
         end
     end)
-    UIS.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local relativePos = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
-            sliderHandle.Size = UDim2.new(relativePos, 0, 1, 0)
-            local value = math.floor(min + (max - min) * relativePos)
-            label.Text = labelText .. ": " .. tostring(value)
-            pcall(callback, value)
-        end
-    end)
+    bar.InputChanged:Connect(function(input)--[[
+  Fried Hub v5 - Football Fusion 2 - PART 2
+  Magnet System (Legit, Blatant, League, Semi)
+  WalkSpeed and JumpPower toggles + sliders
+  Long Arms toggle with resizing/reset
+  Magnet ball pulling logic
+  Full comments and polished
+--]]
 
-    return frame
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- Sync with global settings from Part 1 (or initialize defaults)
+local settings = getgenv().FriedHubSettings or {}
+if next(settings) == nil then
+    settings = {
+        magnetEnabled = false,
+        magnetMode = "Legit",
+        walkSpeedEnabled = false,
+        walkSpeed = 23,
+        jumpPowerEnabled = false,
+        jumpPower = 55,
+        longArmsEnabled = false,
+    }
+    getgenv().FriedHubSettings = settings
 end
 
--- Create main GUI frame
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "FriedHub"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = CoreGui
+-- Magnet modes list
+local magnetModes = {"Legit", "Blatant", "League", "Semi"}
 
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 540, 0, 390)
-MainFrame.Position = UDim2.new(0.3, 0, 0.25, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
-MainFrame.Parent = ScreenGui
-createUICorner(MainFrame)
+-- Magnet pull function (lerp ball toward catch hands)
+local function magnetPull()
+    if not settings.magnetEnabled then return end
 
-local TitleLabel = createLabel("🟧 FriedHub V2", UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 5), MainFrame)
-
--- Open/Close buttons
-local CloseBtn = createButton("✖", UDim2.new(0, 35, 0, 35), UDim2.new(1, -40, 0, 5), MainFrame)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(80, 0, 0)
-
-local OpenBtn = createButton("⚙️", UDim2.new(0, 45, 0, 45), UDim2.new(0.02, 0, 0.85, 0), ScreenGui)
-OpenBtn.BackgroundColor3 = Color3.fromRGB(255, 130, 0)
-OpenBtn.Visible = false
-
-CloseBtn.MouseButton1Click:Connect(function()
-    MainFrame.Visible = false
-    OpenBtn.Visible = true
-end)
-OpenBtn.MouseButton1Click:Connect(function()
-    MainFrame.Visible = true
-    OpenBtn.Visible = false
-end)
-
--- Tabs Setup
-local TabNames = {"Main", "Mags", "Visuals", "Misc"}
-local TabButtons = {}
-local TabPages = {}
-
-for i, name in ipairs(TabNames) do
-    local btn = createButton(name, UDim2.new(0, 120, 0, 30), UDim2.new(0, 15 + (i - 1) * 130, 0, 50), MainFrame)
-    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    btn.TextColor3 = Color3.fromRGB(255, 160, 50)
-    TabButtons[name] = btn
-
-    local page = Instance.new("ScrollingFrame")
-    page.Name = name .. "Page"
-    page.Size = UDim2.new(1, -30, 1, -110)
-    page.Position = UDim2.new(0, 15, 0, 90)
-    page.BackgroundTransparency = 1
-    page.ScrollBarThickness = 6
-    page.Visible = (i == 1)
-    page.Parent = MainFrame
-    TabPages[name] = page
-
-    btn.MouseButton1Click:Connect(function()
-        for _, p in pairs(TabPages) do p.Visible = false end
-        page.Visible = true
-    end)
-end
-
--- === Global State ===
-local State = {
-    MagnetActive = false,
-    MagnetModes = {"Off", "Legit", "Blatant", "League"},
-    MagnetIndex = 1,
-    JumpPower = 50,
-    WalkSpeed = 23,
-    FreezeTech = 0,
-    AngleEnhancer = 0,
-    BallESP = false,
-    BallPath = false,
-    LongArms = false,
-}
-
-local LocalHumanoid
-local LocalRootPart
-
-local function updateCharacterRefs()
-    local char = LocalPlayer.Character
-    if char then
-        LocalHumanoid = char:FindFirstChildOfClass("Humanoid")
-        LocalRootPart = char:FindFirstChild("HumanoidRootPart")
-    end
-end
-updateCharacterRefs()
-LocalPlayer.CharacterAdded:Connect(updateCharacterRefs)
-
--- === MAIN TAB ===
-local mainPage = TabPages["Main"]
-
--- Low Graphics Toggle
-createToggle("Low Graphics Mode", mainPage, 10, function(enabled)
-    local lighting = game:GetService("Lighting")
-    if enabled then
-        lighting.Brightness = 0
-        lighting.GlobalShadows = false
-        lighting.FogEnd = 1e8
-        lighting.OutdoorAmbient = Color3.new(0, 0, 0)
-        for _, part in pairs(Workspace:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.Material = Enum.Material.SmoothPlastic
-                part.Reflectance = 0
-            end
-        end
-    else
-        lighting.Brightness = 2
-        lighting.GlobalShadows = true
-        lighting.FogEnd = 1e8
-        lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
-    end
-end)
-
--- Rejoin Button
-local rejoinBtn = createButton("🔄 Rejoin Game", UDim2.new(0, 230, 0, 35), UDim2.new(0, 10, 0, 60), mainPage)
-rejoinBtn.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
-rejoinBtn.TextColor3 = Color3.new(0, 0, 0)
-rejoinBtn.MouseButton1Click:Connect(function()
-    TeleportService:Teleport(game.PlaceId, LocalPlayer)
-end)
-
--- === MAGS TAB ===
-local magsPage = TabPages["Mags"]
-
--- Magnet Toggle Button
-local magnetToggleBtn = createToggle("Magnet", magsPage, 10, function(enabled)
-    State.MagnetActive = enabled
-    if enabled then
-        startMagnetLoop()
-    else
-        stopMagnetLoop()
-    end
-    updateMagnetToggleText()
-end)
-
--- Magnet Mode Button
-local magnetModeBtn = createButton("Mode: Off", UDim2.new(0, 230, 0, 35), UDim2.new(0, 10, 0, 60), magsPage)
-magnetModeBtn.MouseButton1Click:Connect(function()
-    State.MagnetIndex = State.MagnetIndex + 1
-    if State.MagnetIndex > #State.MagnetModes then
-        State.MagnetIndex = 1
-    end
-    magnetModeBtn.Text = "Mode: " .. State.MagnetModes[State.MagnetIndex]
-    updateMagnetToggleText()
-end)
-
-local function updateMagnetToggleText()
-    if State.MagnetActive then
-        magnetToggleBtn.Text = "[ ON ] Magnet - " .. State.MagnetModes[State.MagnetIndex]
-    else
-        magnetToggleBtn.Text = "[ OFF ] Magnet"
-    end
-end
-updateMagnetToggleText()
-
--- Jump Power Slider
-createSlider("Jump Power", 25, 100, State.JumpPower, 110, magsPage, function(value)
-    State.JumpPower = value
-    if LocalHumanoid then
-        LocalHumanoid.JumpPower = value
-    end
-end)
-
--- Walk Speed Slider
-createSlider("Walk Speed", 16, 70, State.WalkSpeed, 170, magsPage, function(value)
-    State.WalkSpeed = value
-    if LocalHumanoid then
-        LocalHumanoid.WalkSpeed = value
-    end
-end)
-
--- Freeze Tech Slider
-createSlider("Freeze Tech", 0, 100, State.FreezeTech, 230, magsPage, function(value)
-    State.FreezeTech = value
-    -- freeze tech logic (placeholder)
-    -- You can add freeze tech feature here
-end)
-
--- Angle Enhancer Slider
-createSlider("Angle Enhancer", 0, 100, State.AngleEnhancer, 290, magsPage, function(value)
-    State.AngleEnhancer = value
-    -- angle enhancer logic (placeholder)
-    -- Add your angle enhancing feature here
-end)
-
--- === SEMI-STEALTH MAGNET LOOP ===
-local semiMagnetConn
-local function startMagnetLoop()
-    if semiMagnetConn then return end
-    semiMagnetConn = RunService.Heartbeat:Connect(function()
-        if not State.MagnetActive or State.MagnetModes[State.MagnetIndex] == "Off" then return end
-        if not LocalRootPart or not LocalHumanoid or LocalHumanoid.Health <= 0 then return end
-
-        local ball = Workspace:FindFirstChild("Football")
-        if not ball then return end
-
-        local dist = (ball.Position - LocalRootPart.Position).Magnitude
-        if dist > 28 then return end
-
-        local mode = State.MagnetModes[State.MagnetIndex]
-
-        local catchLeft = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("CatchLeft")
-        local catchRight = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("CatchRight")
-        if not catchLeft or not catchRight then return end
-
-        local targetPos
-        if mode == "Legit" then
-            local leftDist = (ball.Position - catchLeft.Position).Magnitude
-            local rightDist = (ball.Position - catchRight.Position).Magnitude
-            targetPos = (leftDist < rightDist) and catchLeft.Position or catchRight.Position
-            ball.Velocity = (targetPos - ball.Position) * 50 -- smooth pull
-        elseif mode == "Blatant" then
-            targetPos = catchRight.Position
-            ball.CFrame = CFrame.new(targetPos)
-            ball.Velocity = Vector3.new(0, 0, 0)
-        elseif mode == "League" then
-            targetPos = catchLeft.Position + Vector3.new(0, 3, 0)
-            ball.Velocity = (targetPos - ball.Position) * 45
-        end
-    end)
-end
-
-local function stopMagnetLoop()
-    if semiMagnetConn then
-        semiMagnetConn:Disconnect()
-        semiMagnetConn = nil
-    end
-end
-
--- Finished Part 1; Part 2 with Visuals & Misc coming up next!-- FriedHub V2 - Part 2 (Visuals, Ball ESP & Path Prediction, Misc Tab)
-
--- Use same ScreenGui, TabPages, State, RunService from Part 1
-
-local visualsPage = TabPages["Visuals"]
-local miscPage = TabPages["Misc"]
-
--- Ball ESP toggle
-local ballESPToggleBtn = createToggle("Ball ESP", visualsPage, 10, function(enabled)
-    State.BallESP = enabled
-    if enabled then
-        enableBallESP()
-    else
-        disableBallESP()
-    end
-end)
-
-local ESPHighlights = {}
-
-local function createHighlight(part)
-    local highlight = Instance.new("Highlight")
-    highlight.Adornee = part
-    highlight.FillColor = Color3.fromRGB(255, 165, 0)
-    highlight.OutlineColor = Color3.fromRGB(255, 115, 0)
-    highlight.Parent = part
-    return highlight
-end
-
-function enableBallESP()
     local ball = Workspace:FindFirstChild("Football")
-    if ball and not ESPHighlights[ball] then
-        ESPHighlights[ball] = createHighlight(ball)
+    if not (ball and ball:IsA("BasePart")) then return end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+
+    local catchRight = char:FindFirstChild("CatchRight") or char:FindFirstChild("Right Arm")
+    local catchLeft = char:FindFirstChild("CatchLeft") or char:FindFirstChild("Left Arm")
+    if not (catchRight and catchLeft) then return end
+
+    local targetPos = (catchRight.Position + catchLeft.Position) / 2
+    local dist = (ball.Position - targetPos).Magnitude
+
+    if dist > 35 then return end -- Magnet range limit
+
+    local lerpFactor = 0
+    if settings.magnetMode == "Legit" then
+        lerpFactor = 0.22
+    elseif settings.magnetMode == "Blatant" then
+        lerpFactor = 0.58
+    elseif settings.magnetMode == "League" then
+        lerpFactor = 0.92
+    elseif settings.magnetMode == "Semi" then
+        lerpFactor = 0.40
     end
+
+    -- Smoothly move ball CFrame closer to hands position
+    ball.CFrame = ball.CFrame:Lerp(CFrame.new(targetPos), lerpFactor)
+    ball.Velocity = Vector3.new(0, 0, 0) -- Reset velocity to prevent physics override
 end
 
-function disableBallESP()
-    for ball, highlight in pairs(ESPHighlights) do
-        highlight:Destroy()
-        ESPHighlights[ball] = nil
-    end
-end
+-- Apply long arms size change or reset
+local function updateLongArms()
+    local char = LocalPlayer.Character
+    if not char then return end
 
--- Auto-manage highlights each frame
-RunService.Heartbeat:Connect(function()
-    if State.BallESP then
-        local ball = Workspace:FindFirstChild("Football")
-        if ball and not ESPHighlights[ball] then
-            ESPHighlights[ball] = createHighlight(ball)
-        elseif not ball and next(ESPHighlights) then
-            disableBallESP()
-        end
-    end
-end)
+    local leftArm = char:FindFirstChild("Left Arm") or char:FindFirstChild("LeftUpperArm")
+    local rightArm = char:FindFirstChild("Right Arm") or char:FindFirstChild("RightUpperArm")
 
--- Ball Path Prediction toggle
-local ballPathToggle = createToggle("Ball Path Prediction", visualsPage, 50, function(enabled)
-    State.BallPath = enabled
-    if enabled then
-        startBallPathPrediction()
+    if settings.longArmsEnabled then
+        if leftArm then leftArm.Size = Vector3.new(4, 4, 4) end
+        if rightArm then rightArm.Size = Vector3.new(4, 4, 4) end
     else
-        stopBallPathPrediction()
-        clearBallPathVisual()
+        if leftArm then leftArm.Size = Vector3.new(1, 2, 1) end
+        if rightArm then rightArm.Size = Vector3.new(1, 2, 1) end
     end
-end)
-
-local ballPathParts = {}
-local ballPathConnection
-
-local function clearBallPathVisual()
-    for _, part in pairs(ballPathParts) do
-        part:Destroy()
-    end
-    ballPathParts = {}
 end
 
-local function startBallPathPrediction()
-    if ballPathConnection then return end
-    ballPathConnection = RunService.Heartbeat:Connect(function()
-        clearBallPathVisual()
-        local ball = Workspace:FindFirstChild("Football")
-        if not ball then return end
-        local ballVel = ball.Velocity
-        local ballPos = ball.Position
+-- Update walk speed and jump power according to toggles
+local function updateMovement()
+    if settings.walkSpeedEnabled then
+        Humanoid.WalkSpeed = settings.walkSpeed
+    else
+        Humanoid.WalkSpeed = 16 -- Default Roblox walk speed
+    end
 
-        local gravity = Workspace.Gravity or 196.2
-        local timeStep = 0.1
-        local totalSteps = 20
+    if settings.jumpPowerEnabled then
+        Humanoid.JumpPower = settings.jumpPower
+    else
+        Humanoid.JumpPower = 50 -- Default jump power
+    end
+end
 
-        for i = 1, totalSteps do
-            local t = i * timeStep
-            local futurePos = ballPos
-                + ballVel * t-- FriedHub V2 - Part 3 (Finish Ball Path Prediction + Misc Tab)
+-- Loop to update magnet, long arms, and movement every frame
+RunService.RenderStepped:Connect(function()
+    magnetPull()
+    updateLongArms()
+    updateMovement()
+end)
 
-local visualsPage = TabPages["Visuals"]
-local miscPage = TabPages["Misc"]
+print("[FriedHub] Part 2 loaded: Magnet system, movement, long arms active")
 
--- Continue Ball Path Prediction visuals from Part 2
+--[[ 
+  Additional: You can connect GUI toggles to update settings
+  For example, your magnet toggle button's callback:
+    function(enabled) settings.magnetEnabled = enabled end
+  And magnet mode cycling button callback:
+    cycle magnetModes and update settings.magnetMode accordingly
+--]]
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local relX = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+            fill.Size = UDim2.new(relX, 0, 1, 0)--[[
+  Fried Hub v5 - Football Fusion 2 - PART 3
+  BallPath prediction visualization with neon parts
+  Ball ESP with glowy floating labels
+  Low graphics mode toggle (disable effects, shadows)
+  Auto rejoin on death or teleport
+  Final polish, minimize toggle enhancements
+  Full comments and humanized
+--]]
 
-local gravity = Workspace.Gravity or 196.2
-local ballPathParts = ballPathParts or {}
-local ballPathConnection = ballPathConnection or nil
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local TeleportService = game:GetService("TeleportService")
+local Lighting = game:GetService("Lighting")
 
-local function createPathPart(position)
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+local settings = getgenv().FriedHubSettings or {}
+if next(settings) == nil then
+    settings = {
+        ballPathEnabled = true,
+        ballESPEnabled = true,
+        lowGraphicsEnabled = false,
+        -- plus all others
+    }
+    getgenv().FriedHubSettings = settings
+end
+
+-- BALL PATH PREDICTION --
+
+local BallPathParts = {} -- Hold neon spheres representing predicted ball path
+
+local function clearBallPath()
+    for _, part in pairs(BallPathParts) do
+        if part and part.Parent then part:Destroy() end
+    end
+    BallPathParts = {}
+end
+
+local function createBallPathPart(pos)
     local part = Instance.new("Part")
-    part.Size = Vector3.new(0.3, 0.3, 0.3)
     part.Anchored = true
     part.CanCollide = false
     part.Material = Enum.Material.Neon
     part.Color = Color3.fromRGB(255, 140, 0)
-    part.Position = position
+    part.Size = Vector3.new(0.5, 0.5, 0.5)
+    part.CFrame = CFrame.new(pos)
     part.Parent = Workspace
     return part
 end
 
-function startBallPathPrediction()
-    if ballPathConnection then return end
-    ballPathConnection = RunService.Heartbeat:Connect(function()
-        for _, part in pairs(ballPathParts) do
-            part:Destroy()
-        end
-        ballPathParts = {}
+-- Predict ball trajectory function
+local function updateBallPath()
+    clearBallPath()
 
-        local ball = Workspace:FindFirstChild("Football")
-        if not ball then return end
-        local ballVel = ball.Velocity
-        local ballPos = ball.Position
+    if not settings.ballPathEnabled then return end
 
-        local timeStep = 0.1
-        local totalSteps = 20
+    local ball = Workspace:FindFirstChild("Football")
+    if not (ball and ball:IsA("BasePart")) then return end
 
-        for i = 1, totalSteps do
-            local t = i * timeStep
-            local futurePos = ballPos
-                + ballVel * t
-                + Vector3.new(0, -0.5 * gravity * t * t, 0)
-            local pathPart = createPathPart(futurePos)
-            table.insert(ballPathParts, pathPart)
-        end
-    end)
+    local velocity = ball.Velocity
+    local position = ball.Position
+
+    local timeStep = 0.15
+    local gravity = Vector3.new(0, workspace.Gravity, 0)
+    local numPoints = 20
+
+    for i = 1, numPoints do
+        local t = i * timeStep
+        local predictedPos = position + velocity * t + 0.5 * gravity * (t^2)
+        local part = createBallPathPart(predictedPos)
+        table.insert(BallPathParts, part)
+    end
 end
 
-function stopBallPathPrediction()
-    if ballPathConnection then
-        ballPathConnection:Disconnect()
-        ballPathConnection = nil
-    end
-    for _, part in pairs(ballPathParts) do
-        part:Destroy()
-    end
-    ballPathParts = {}
-end
-
--- === MISC TAB ===
--- Rejoin Button
-local rejoinBtnMisc = createButton("🔄 Rejoin Game", UDim2.new(0, 230, 0, 35), UDim2.new(0, 10, 0, 10), miscPage)
-rejoinBtnMisc.BackgroundColor3 = Color3.fromRGB(255, 140, 0)
-rejoinBtnMisc.TextColor3 = Color3.new(0, 0, 0)
-rejoinBtnMisc.MouseButton1Click:Connect(function()
-    TeleportService:Teleport(game.PlaceId, LocalPlayer)
+RunService.RenderStepped:Connect(function()
+    updateBallPath()
 end)
 
--- Long Arms Toggle
-local longArmsToggle = createToggle("Long Arms", miscPage, 60, function(enabled)
-    State.LongArms = enabled
-    local char = LocalPlayer.Character
-    if not char then return end
+-- BALL ESP --
 
-    -- Extend arms length or reset
-    local function setLongArms(bool)
-        for _, limbName in pairs({"LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm"}) do
-            local part = char:FindFirstChild(limbName)
-            if part and part:IsA("BasePart") then
-                if bool then
-                    part.Size = Vector3.new(1, 3, 1) -- stretch lengthened arms
-                else
-                    part.Size = Vector3.new(1, 2, 1) -- reset normal arms
-                end
+local espBillboard = nil
+
+local function createESP()
+    local ball = Workspace:FindFirstChild("Football")
+    if not (ball and ball:IsA("BasePart")) then return end
+
+    if espBillboard then espBillboard:Destroy() end
+
+    espBillboard = Instance.new("BillboardGui")
+    espBillboard.Name = "BallESP"
+    espBillboard.Adornee = ball
+    espBillboard.Size = UDim2.new(0, 150, 0, 50)
+    espBillboard.AlwaysOnTop = true
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Parent = espBillboard
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = "Football"
+    textLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+    textLabel.Font = Enum.Font.GothamBold
+    textLabel.TextStrokeTransparency = 0
+    textLabel.TextSize = 24
+    textLabel.TextScaled = true
+
+    espBillboard.Parent = Workspace.CurrentCamera
+end
+
+local function removeESP()
+    if espBillboard then
+        espBillboard:Destroy()
+        espBillboard = nil
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    if settings.ballESPEnabled then
+        if not espBillboard then createESP() end
+    else
+        if espBillboard then removeESP() end
+    end
+end)
+
+-- LOW GRAPHICS MODE --
+
+local function setLowGraphics(enabled)
+    if enabled then
+        -- Remove all lighting effects
+        for _, effect in pairs(Lighting:GetChildren()) do
+            if effect:IsA("Effect") then
+                effect.Enabled = false
+            end
+        end
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 9e9
+        Lighting.Brightness = 0.6
+        Lighting.OutdoorAmbient = Color3.fromRGB(50, 50, 50)
+    else
+        -- Restore defaults (hardcoded or you can store previous states)
+        Lighting.GlobalShadows = true
+        Lighting.FogEnd = 1000
+        Lighting.Brightness = 2
+        Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+        for _, effect in pairs(Lighting:GetChildren()) do
+            if effect:IsA("Effect") then
+                effect.Enabled = true
             end
         end
     end
+end
 
-    setLongArms(enabled)
-end)
-
--- Cleanup on character respawn for long arms reset
-LocalPlayer.CharacterAdded:Connect(function(char)
-    task.wait(1)
-    if State.LongArms then
-        local function setLongArmsOnSpawn()
-            for _, limbName in pairs({"LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm"}) do
-                local part = char:FindFirstChild(limbName)
-                if part and part:IsA("BasePart") then
-                    part.Size = Vector3.new(1, 3, 1)
-                end
-            end
-        end
-        setLongArmsOnSpawn()
+-- Connect low graphics toggle
+spawn(function()
+    while wait(0.5) do
+        setLowGraphics(settings.lowGraphicsEnabled)
     end
 end)
 
--- Final: Notify that FriedHub loaded
-print("[FriedHub V2] Loaded successfully.")
+-- AUTO REJOIN --
+
+local function onCharacterDied()
+    wait(3)
+    local placeId = game.PlaceId
+    TeleportService:Teleport(placeId, LocalPlayer)
+end
+
+Character:WaitForChild("Humanoid").Died:Connect(onCharacterDied)
+
+-- Teleport detection auto rejoin (for teleport-to-lobby etc)
+game:GetService("Players").LocalPlayer.OnTeleport:Connect(function(state)
+    if state == Enum.TeleportState.Started then
+        -- Optionally show notification or save data
+    end
+end)
+
+-- Final print
+print("[FriedHub] Part 3 loaded: BallPath, ESP, Low Graphics, Auto Rejoin active")
 
 --[[
-INSTRUCTIONS:
-- Execute Part 1 first
-- Then execute Part 2
-- Finally execute Part 3
-All parts share same global GUI and state.
-]]
-                + Vector
+  To fully connect toggles from Part 1 GUI:
+    - On ballPath toggle: settings.ballPathEnabled = true/false
+    - On ballESP toggle: settings.ballESPEnabled = true/false
+    - On low graphics toggle: settings.lowGraphicsEnabled = true/false
+  All synced globally via getgenv().FriedHubSettings
+--]]
