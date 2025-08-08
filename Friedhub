@@ -1,14 +1,10 @@
--- FriedHub FF2 Ultimate - Undetectable with visible GUI and anti-cheat bypass
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 
--- Wrap everything in a local function to avoid polluting globals
 local function main()
-    -- Settings
     local SETTINGS_KEY = "FriedHub_FF2_Settings"
 
     local settings = {
@@ -25,7 +21,7 @@ local function main()
         angleEnhancer = true,
     }
 
-    -- Load settings safely
+    -- Load saved settings safely
     pcall(function()
         if readfile and isfile and isfile(SETTINGS_KEY) then
             local loaded = HttpService:JSONDecode(readfile(SETTINGS_KEY))
@@ -41,7 +37,7 @@ local function main()
         end)
     end
 
-    -- GUI Setup (visible, draggable, no hide)
+    -- GUI Setup
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "FriedHub_FF2"
     ScreenGui.ResetOnSpawn = false
@@ -70,23 +66,19 @@ local function main()
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Position = UDim2.new(0, 15, 0, 0)
 
-    -- Tabs container
     local tabsFrame = Instance.new("Frame", mainFrame)
     tabsFrame.Size = UDim2.new(0, 110, 1, -40)
     tabsFrame.Position = UDim2.new(0, 0, 0, 40)
     tabsFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
     tabsFrame.BorderSizePixel = 0
-
     local tabsUICorner = Instance.new("UICorner", tabsFrame)
     tabsUICorner.CornerRadius = UDim.new(0, 8)
 
-    -- Pages container
     local pagesFrame = Instance.new("Frame", mainFrame)
     pagesFrame.Size = UDim2.new(1, -110, 1, -40)
     pagesFrame.Position = UDim2.new(0, 110, 0, 40)
     pagesFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
     pagesFrame.BorderSizePixel = 0
-
     local pagesUICorner = Instance.new("UICorner", pagesFrame)
     pagesUICorner.CornerRadius = UDim.new(0, 8)
 
@@ -135,7 +127,6 @@ local function main()
 
     selectTab(tabNames[1])
 
-    -- Helpers for toggles and sliders
     local function createToggle(parent, text, initial, callback)
         local btn = Instance.new("TextButton", parent)
         btn.Size = UDim2.new(1, -20, 0, 30)
@@ -201,10 +192,8 @@ local function main()
         return frame
     end
 
-    -- Populate Magnet tab
     createToggle(pages["Magnet"], "Enable Magnet", settings.magnetEnabled, function(v) settings.magnetEnabled = v end)
 
-    -- Magnet Mode Dropdown (cycling button)
     do
         local modes = {"Legit", "Blatant", "League"}
         local modeIdx = table.find(modes, settings.magnetMode) or 1
@@ -233,7 +222,6 @@ local function main()
     createSlider(pages["Magnet"], "Magnet Range", settings.magnetRange, 10, 80, function(v) settings.magnetRange = v end)
     createToggle(pages["Magnet"], "Angle Enhancer", settings.angleEnhancer, function(v) settings.angleEnhancer = v end)
 
-    -- Misc tab toggles
     createToggle(pages["Misc"], "Low Graphics", settings.lowGraphics, function(state)
         settings.lowGraphics = state
         saveSettings()
@@ -249,7 +237,6 @@ local function main()
             game.Lighting.GlobalShadows = false
         else
             game.Lighting.GlobalShadows = true
-            -- Optionally reload materials or effects if needed
         end
     end)
 
@@ -271,11 +258,11 @@ local function main()
         end
     end)
 
-    -- ESP tab toggles
     createToggle(pages["ESP"], "Ball ESP", settings.esp, function(v) settings.esp = v end)
     createToggle(pages["ESP"], "Ball Path Visualizer", settings.ballPath, function(v) settings.ballPath = v end)
 
-    -- Magnet & AutoCatch Logic with Anti-Cheat Bypass
+    -- Magnet & AutoCatch Logic with Weld Catch instead of firetouchinterest
+
     local lastCatch = 0
     local catchCooldown = 0.25
 
@@ -289,11 +276,21 @@ local function main()
         return lookVector:Dot(dir) > 0.5
     end
 
+    -- Weld reference, so we don't weld multiple times
+    local currentWeld = nil
+
     RunService.Heartbeat:Connect(function()
         if not settings.magnetEnabled and not settings.autoCatch then return end
         local ball = getBall()
         local char = player.Character
-        if not ball or not char then return end
+        if not ball or not char then 
+            -- cleanup any welds if character or ball missing
+            if currentWeld then
+                currentWeld:Destroy()
+                currentWeld = nil
+            end
+            return 
+        end
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
@@ -309,8 +306,8 @@ local function main()
             facing = isFacingTarget(hrp.CFrame, ball.Position)
         end
 
-        -- Magnet Modes
         if settings.magnetEnabled and distPredicted <= settings.magnetRange and facing then
+            -- Create BodyVelocity if not present
             local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
             if not bv then
                 bv = Instance.new("BodyVelocity")
@@ -340,24 +337,46 @@ local function main()
                 bv.Velocity = baseVel + noise
             end
 
+            -- Safe catch using Weld when close enough
             if settings.autoCatch and distCurrent <= 5 then
-                -- Firetouchinterest with random delay to bypass anti-cheat
-                local handNames = {"CatchLeft", "CatchRight"}
-                for _, handName in ipairs(handNames) do
-                    local hand = char:FindFirstChild(handName)
-                    if hand then
-                        task.spawn(function()
-                            pcall(function()
-                                firetouchinterest(ball, hand, 0)
-                                task.wait(0.015 + math.random() * 0.015)
-                                firetouchinterest(ball, hand, 1)
-                            end)
+                -- If no weld exists, create it to attach the ball to the catch positions
+                if not currentWeld then
+                    local catchPosLeft = char:FindFirstChild("CatchLeft")
+                    local catchPosRight = char:FindFirstChild("CatchRight")
+                    if catchPosLeft and catchPosRight then
+                        -- Create an invisible part between CatchLeft and CatchRight to weld the ball
+                        local weldPart = Instance.new("Part")
+                        weldPart.Size = Vector3.new(1,1,1)
+                        weldPart.Transparency = 1
+                        weldPart.Anchored = false
+                        weldPart.CanCollide = false
+                        weldPart.Parent = char
+
+                        weldPart.CFrame = CFrame.new((catchPosLeft.Position + catchPosRight.Position)/2)
+
+                        local weld = Instance.new("WeldConstraint")
+                        weld.Part0 = ball
+                        weld.Part1 = weldPart
+                        weld.Parent = ball
+
+                        currentWeld = weld
+
+                        -- Move the weldPart to follow the average position of the catch hands
+                        RunService.Heartbeat:Connect(function()
+                            if weldPart.Parent and catchPosLeft.Parent and catchPosRight.Parent then
+                                weldPart.CFrame = CFrame.new((catchPosLeft.Position + catchPosRight.Position)/2)
+                            else
+                                -- Cleanup when character parts are gone
+                                weld:Destroy()
+                                weldPart:Destroy()
+                                currentWeld = nil
+                            end
                         end)
                     end
                 end
+
                 lastCatch = now
 
-                -- Freeze tech safely
                 if settings.freezeTech and not hrp.Anchored then
                     hrp.Anchored = true
                     task.delay(settings.freezeTime, function()
@@ -366,9 +385,21 @@ local function main()
                         end
                     end)
                 end
+            else
+                -- Remove weld and BodyVelocity if too far or not catching
+                if currentWeld then
+                    currentWeld:Destroy()
+                    currentWeld = nil
+                end
+                local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
+                if bv then bv:Destroy() end
             end
         else
-            -- Remove BodyVelocity to avoid suspicious lingering objects
+            -- Remove any weld or BodyVelocity if not magnetting
+            if currentWeld then
+                currentWeld:Destroy()
+                currentWeld = nil
+            end
             local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
             if bv then bv:Destroy() end
         end
@@ -381,16 +412,4 @@ local function main()
         if ball and not ball:FindFirstChild("FriedHubHighlight") then
             local highlight = Instance.new("Highlight", ball)
             highlight.Name = "FriedHubHighlight"
-            highlight.FillColor = Color3.fromRGB(255,255,0)
-            highlight.OutlineColor = Color3.fromRGB(255,0,0)
-            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        end
-    end)
-
-    -- Ball Path Visualizer
-    -- (You can expand this later if needed)
-
-end
-
--- Run main function
-task.spawn(main)
+            highlight.FillColor = Color3.fromRGB(255,255
