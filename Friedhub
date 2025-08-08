@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
@@ -21,7 +22,7 @@ local function main()
         angleEnhancer = true,
     }
 
-    -- Load saved settings safely
+    -- Load settings from file (if supported)
     pcall(function()
         if readfile and isfile and isfile(SETTINGS_KEY) then
             local loaded = HttpService:JSONDecode(readfile(SETTINGS_KEY))
@@ -192,6 +193,7 @@ local function main()
         return frame
     end
 
+    -- Magnet Tab Controls
     createToggle(pages["Magnet"], "Enable Magnet", settings.magnetEnabled, function(v) settings.magnetEnabled = v end)
 
     do
@@ -222,6 +224,7 @@ local function main()
     createSlider(pages["Magnet"], "Magnet Range", settings.magnetRange, 10, 80, function(v) settings.magnetRange = v end)
     createToggle(pages["Magnet"], "Angle Enhancer", settings.angleEnhancer, function(v) settings.angleEnhancer = v end)
 
+    -- Misc Tab Controls
     createToggle(pages["Misc"], "Low Graphics", settings.lowGraphics, function(state)
         settings.lowGraphics = state
         saveSettings()
@@ -258,10 +261,9 @@ local function main()
         end
     end)
 
+    -- ESP Tab Controls
     createToggle(pages["ESP"], "Ball ESP", settings.esp, function(v) settings.esp = v end)
     createToggle(pages["ESP"], "Ball Path Visualizer", settings.ballPath, function(v) settings.ballPath = v end)
-
-    -- Magnet & AutoCatch Logic with Weld Catch instead of firetouchinterest
 
     local lastCatch = 0
     local catchCooldown = 0.25
@@ -276,38 +278,31 @@ local function main()
         return lookVector:Dot(dir) > 0.5
     end
 
-    -- Weld reference, so we don't weld multiple times
-    local currentWeld = nil
-
     RunService.Heartbeat:Connect(function()
         if not settings.magnetEnabled and not settings.autoCatch then return end
         local ball = getBall()
         local char = player.Character
-        if not ball or not char then 
-            -- cleanup any welds if character or ball missing
-            if currentWeld then
-                currentWeld:Destroy()
-                currentWeld = nil
-            end
-            return 
-        end
+        if not ball or not char then return end
         local hrp = char:FindFirstChild("HumanoidRootPart")
         if not hrp then return end
 
         local now = tick()
         if now - lastCatch < catchCooldown then return end
 
-        local predictedPos = ball.Position + (ball.AssemblyLinearVelocity * 0.15)
+        local ballVel = ball.AssemblyLinearVelocity
+        local gravity = workspace.Gravity or 196.2
+        local predictionTime = 0.15
+        local predictedPos = ball.Position + (ballVel * predictionTime) + Vector3.new(0, -0.5 * gravity * predictionTime^2, 0)
+
         local distPredicted = (predictedPos - hrp.Position).Magnitude
         local distCurrent = (ball.Position - hrp.Position).Magnitude
 
         local facing = true
         if settings.angleEnhancer then
-            facing = isFacingTarget(hrp.CFrame, ball.Position)
+            facing = isFacingTarget(hrp.CFrame, predictedPos)
         end
 
         if settings.magnetEnabled and distPredicted <= settings.magnetRange and facing then
-            -- Create BodyVelocity if not present
             local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
             if not bv then
                 bv = Instance.new("BodyVelocity")
@@ -320,8 +315,9 @@ local function main()
                 local catchPosLeft = char:FindFirstChild("CatchLeft")
                 local catchPosRight = char:FindFirstChild("CatchRight")
                 if catchPosLeft and catchPosRight then
-                    local targetPos = (catchPosLeft.Position + catchPosRight.Position)/2
-                    bv.Velocity = (targetPos - ball.Position).Unit * 60
+                    local targetPos = (catchPosLeft.Position + catchPosRight.Position) / 2
+                    local direction = (targetPos - ball.Position).Unit
+                    bv.Velocity = direction * 60
                 else
                     bv.Velocity = (hrp.Position - ball.Position).Unit * 55
                 end
@@ -337,44 +333,16 @@ local function main()
                 bv.Velocity = baseVel + noise
             end
 
-            -- Safe catch using Weld when close enough
             if settings.autoCatch and distCurrent <= 5 then
-                -- If no weld exists, create it to attach the ball to the catch positions
-                if not currentWeld then
-                    local catchPosLeft = char:FindFirstChild("CatchLeft")
-                    local catchPosRight = char:FindFirstChild("CatchRight")
-                    if catchPosLeft and catchPosRight then
-                        -- Create an invisible part between CatchLeft and CatchRight to weld the ball
-                        local weldPart = Instance.new("Part")
-                        weldPart.Size = Vector3.new(1,1,1)
-                        weldPart.Transparency = 1
-                        weldPart.Anchored = false
-                        weldPart.CanCollide = false
-                        weldPart.Parent = char
-
-                        weldPart.CFrame = CFrame.new((catchPosLeft.Position + catchPosRight.Position)/2)
-
-                        local weld = Instance.new("WeldConstraint")
-                        weld.Part0 = ball
-                        weld.Part1 = weldPart
-                        weld.Parent = ball
-
-                        currentWeld = weld
-
-                        -- Move the weldPart to follow the average position of the catch hands
-                        RunService.Heartbeat:Connect(function()
-                            if weldPart.Parent and catchPosLeft.Parent and catchPosRight.Parent then
-                                weldPart.CFrame = CFrame.new((catchPosLeft.Position + catchPosRight.Position)/2)
-                            else
-                                -- Cleanup when character parts are gone
-                                weld:Destroy()
-                                weldPart:Destroy()
-                                currentWeld = nil
-                            end
-                        end)
+                -- Replace firetouchinterest with safe proximity check (you can add your catch logic here)
+                local handNames = {"CatchLeft", "CatchRight"}
+                for _, handName in ipairs(handNames) do
+                    local hand = char:FindFirstChild(handName)
+                    if hand and (ball.Position - hand.Position).Magnitude <= 3 then
+                        -- Example: FireServer to catch (replace with your game's event)
+                        -- game:GetService("ReplicatedStorage").CatchEvent:FireServer()
                     end
                 end
-
                 lastCatch = now
 
                 if settings.freezeTech and not hrp.Anchored then
@@ -385,31 +353,12 @@ local function main()
                         end
                     end)
                 end
-            else
-                -- Remove weld and BodyVelocity if too far or not catching
-                if currentWeld then
-                    currentWeld:Destroy()
-                    currentWeld = nil
-                end
-                local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
-                if bv then bv:Destroy() end
             end
         else
-            -- Remove any weld or BodyVelocity if not magnetting
-            if currentWeld then
-                currentWeld:Destroy()
-                currentWeld = nil
-            end
             local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
             if bv then bv:Destroy() end
         end
     end)
+end
 
-    -- Ball ESP
-    RunService.RenderStepped:Connect(function()
-        if not settings.esp then return end
-        local ball = getBall()
-        if ball and not ball:FindFirstChild("FriedHubHighlight") then
-            local highlight = Instance.new("Highlight", ball)
-            highlight.Name = "FriedHubHighlight"
-            highlight.FillColor = Color3.fromRGB(255,255
+main()
