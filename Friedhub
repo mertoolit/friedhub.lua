@@ -39,7 +39,7 @@ local function saveSettings()
 end
 
 -- GUI Setup --
-local ScreenGui = Instance.new("ScreenGui")
+getgenv().run = false -- turns off main looplocal ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "FriedHub_FF2"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = game.CoreGui
@@ -660,3 +660,13 @@ RunService.Heartbeat:Connect(function()
         end
     end
 end)
+local lastUpdate = 0
+RunService.Heartbeat:Connect(function()
+    if tick() - lastUpdate > 0.5 then
+        lastUpdate = tick()
+        -- run update
+    end
+end)-- disable this section if you don’t need visualswhile run do
+    -- do something
+    task.wait(0.2) -- slow it down
+end
