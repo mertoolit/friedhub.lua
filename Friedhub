@@ -1,24 +1,33 @@
--- Part 1: GUI + Settings + Magnet Modes (Legit, Blatant, League, Semi-Stealth)
+-- FriedHub FF2 - Part 1: GUI + Settings + Magnet + Jump + Freeze + Angle Enhancer
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
-local mouse = player:GetMouse()
+local char = player.Character or player.CharacterAdded:Wait()
 
 local SETTINGS_KEY = "FriedHub_FF2_Settings"
 
--- Default settings
 local settings = {
     magnetEnabled = true,
     magnetMode = "Legit", -- Legit, Blatant, League, Semi-Stealth
     autoCatch = true,
+    freezeTech = false,
+    freezeTime = 2,
+    esp = true,
+    ballPath = true,
+    lowGraphics = false,
+    longArms = false,
     magnetRange = 50,
-    jumpBoost = 10,
+    angleEnhancer = true,
+    jumpBoost = true,
+    jumpBoostAmount = 10,
+    antiJam = true,
 }
 
--- Load settings
+-- Load saved settings
 pcall(function()
     if readfile and isfile and isfile(SETTINGS_KEY) then
         local loaded = HttpService:JSONDecode(readfile(SETTINGS_KEY))
@@ -43,7 +52,7 @@ ScreenGui.Parent = game.CoreGui
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 400, 0, 460)
 mainFrame.Position = UDim2.new(0.5, -200, 0.5, -230)
-mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15,15,15)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
 mainFrame.Draggable = true
@@ -63,39 +72,34 @@ title.TextStrokeTransparency = 0.6
 title.TextXAlignment = Enum.TextXAlignment.Left
 title.Position = UDim2.new(0, 15, 0, 0)
 
--- Tabs Frame
 local tabsFrame = Instance.new("Frame", mainFrame)
 tabsFrame.Size = UDim2.new(0, 110, 1, -40)
 tabsFrame.Position = UDim2.new(0, 0, 0, 40)
-tabsFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+tabsFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
 tabsFrame.BorderSizePixel = 0
 local tabsUICorner = Instance.new("UICorner", tabsFrame)
 tabsUICorner.CornerRadius = UDim.new(0, 8)
 
--- Pages Frame
 local pagesFrame = Instance.new("Frame", mainFrame)
 pagesFrame.Size = UDim2.new(1, -110, 1, -40)
 pagesFrame.Position = UDim2.new(0, 110, 0, 40)
-pagesFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+pagesFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
 pagesFrame.BorderSizePixel = 0
 local pagesUICorner = Instance.new("UICorner", pagesFrame)
 pagesUICorner.CornerRadius = UDim.new(0, 8)
 
--- Tabs and Pages
-local tabNames = {"Magnet"}
+local tabNames = {"Magnet", "Misc", "ESP"}
 local tabs = {}
 local pages = {}
-local selectedTab = nil
 
 local function selectTab(name)
     for tabName, btn in pairs(tabs) do
-        btn.BackgroundColor3 = (tabName == name) and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(30, 30, 30)
+        btn.BackgroundColor3 = (tabName == name) and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(30,30,30)
         btn.TextColor3 = (tabName == name) and Color3.new(1,1,1) or Color3.fromRGB(180,180,180)
     end
     for pageName, page in pairs(pages) do
         page.Visible = (pageName == name)
     end
-    selectedTab = name
 end
 
 for i, tabName in ipairs(tabNames) do
@@ -125,9 +129,9 @@ for i, tabName in ipairs(tabNames) do
     pages[tabName] = page
 end
 
-selectTab(tabNames[1])
+selectTab("Magnet")
 
--- Utility functions to create toggles and dropdowns
+-- Helper to create toggles
 local function createToggle(parent, text, initial, callback)
     local btn = Instance.new("TextButton", parent)
     btn.Size = UDim2.new(1, -20, 0, 30)
@@ -150,28 +154,7 @@ local function createToggle(parent, text, initial, callback)
     return btn
 end
 
-local function createDropdown(parent, text, options, initialIndex, callback)
-    local dropdown = Instance.new("TextButton", parent)
-    dropdown.Size = UDim2.new(1, -20, 0, 30)
-    dropdown.Position = UDim2.new(0, 10, 0, (#parent:GetChildren())*35)
-    dropdown.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    dropdown.TextColor3 = Color3.new(1,1,1)
-    dropdown.Font = Enum.Font.Gotham
-    dropdown.TextSize = 14
-
-    local selectedIndex = initialIndex or 1
-    dropdown.Text = text .. ": " .. options[selectedIndex]
-
-    dropdown.MouseButton1Click:Connect(function()
-        selectedIndex = selectedIndex + 1
-        if selectedIndex > #options then selectedIndex = 1 end
-        dropdown.Text = text .. ": " .. options[selectedIndex]
-        callback(options[selectedIndex])
-        saveSettings()
-    end)
-    return dropdown
-end
-
+-- Helper to create sliders
 local function createSlider(parent, text, initial, min, max, callback)
     local frame = Instance.new("Frame", parent)
     frame.Size = UDim2.new(1, -20, 0, 40)
@@ -215,32 +198,91 @@ local function createSlider(parent, text, initial, min, max, callback)
     return frame
 end
 
--- Magnet Toggles and Settings on Magnet Tab
+-- Magnet Tab Controls
 createToggle(pages["Magnet"], "Enable Magnet", settings.magnetEnabled, function(v) settings.magnetEnabled = v end)
 
-local magnetModes = {"Legit", "Blatant", "League", "Semi-Stealth"}
-local initialModeIndex = table.find(magnetModes, settings.magnetMode) or 1
-createDropdown(pages["Magnet"], "Magnet Mode", magnetModes, initialModeIndex, function(v) settings.magnetMode = v end)
+do
+    local modes = {"Legit", "Blatant", "League", "Semi-Stealth"}
+    local modeIdx = table.find(modes, settings.magnetMode) or 1
+
+    local dropdown = Instance.new("TextButton", pages["Magnet"])
+    dropdown.Size = UDim2.new(1, -20, 0, 30)
+    dropdown.Position = UDim2.new(0, 10, 0, (#pages["Magnet"]:GetChildren())*35)
+    dropdown.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    dropdown.TextColor3 = Color3.new(1,1,1)
+    dropdown.Font = Enum.Font.Gotham
+    dropdown.TextSize = 14
+    dropdown.Text = "Magnet Mode: " .. modes[modeIdx]
+
+    dropdown.MouseButton1Click:Connect(function()
+        modeIdx = modeIdx + 1
+        if modeIdx > #modes then modeIdx = 1 end
+        dropdown.Text = "Magnet Mode: " .. modes[modeIdx]
+        settings.magnetMode = modes[modeIdx]
+        saveSettings()
+    end)
+end
 
 createToggle(pages["Magnet"], "Auto Catch", settings.autoCatch, function(v) settings.autoCatch = v end)
+createToggle(pages["Magnet"], "Freeze Tech", settings.freezeTech, function(v) settings.freezeTech = v end)
+createSlider(pages["Magnet"], "Freeze Time (sec)", settings.freezeTime, 1, 5, function(v) settings.freezeTime = v end)
 createSlider(pages["Magnet"], "Magnet Range", settings.magnetRange, 10, 80, function(v) settings.magnetRange = v end)
-createSlider(pages["Magnet"], "Jump Boost", settings.jumpBoost, 0, 25, function(v) settings.jumpBoost = v end)
+createToggle(pages["Magnet"], "Angle Enhancer", settings.angleEnhancer, function(v) settings.angleEnhancer = v end)
+createToggle(pages["Magnet"], "Jump Boost", settings.jumpBoost, function(v) settings.jumpBoost = v end)
+createSlider(pages["Magnet"], "Jump Boost Amount", settings.jumpBoostAmount, 1, 50, function(v) settings.jumpBoostAmount = v end)
+createToggle(pages["Magnet"], "Anti Jam", settings.antiJam, function(v) settings.antiJam = v end)
 
--- Magnet Logic
+-- Misc Tab Controls
+createToggle(pages["Misc"], "Low Graphics", settings.lowGraphics, function(state)
+    settings.lowGraphics = state
+    saveSettings()
+    if state then
+        for _, obj in ipairs(workspace:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                obj.Material = Enum.Material.SmoothPlastic
+                obj.Reflectance = 0
+            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+                obj.Enabled = false
+            end
+        end
+        game.Lighting.GlobalShadows = false
+    else
+        game.Lighting.GlobalShadows = true
+    end
+end)
+
+createToggle(pages["Misc"], "Long Arms", settings.longArms, function(state)
+    settings.longArms = state
+    saveSettings()
+    local char = player.Character
+    if char then
+        for _, limbName in pairs({"Left Arm","Right Arm"}) do
+            local limb = char:FindFirstChild(limbName)
+            if limb and limb:IsA("BasePart") then
+                if state then
+                    limb.Size = Vector3.new(2,5,2)
+                else
+                    limb.Size = Vector3.new(2,2,1)
+                end
+            end
+        end
+    end-- FriedHub FF2 - Part 2: Magnet Logic
+
+local magnetBodyVelocityName = "FriedHubMagnetBodyVelocity"
 local lastCatch = 0
 local catchCooldown = 0.25
+local freezeUntil = 0
+local antiJamCooldown = 0
 
 local function getBall()
     return workspace:FindFirstChild("Football")
 end
 
-local function getCatchPositions(char)
-    local left = char:FindFirstChild("CatchLeft")
-    local right = char:FindFirstChild("CatchRight")
-    if left and right then
-        return left.Position, right.Position
-    end
-    return nil, nil
+local function getMid()
+    local char = player.Character or player.CharacterAdded:Wait()
+    local left = char:WaitForChild("CatchLeft")
+    local right = char:WaitForChild("CatchRight")
+    return left.Position:Lerp(right.Position, 0.5)
 end
 
 local function isFacingTarget(hrpCFrame, targetPos)
@@ -249,30 +291,39 @@ local function isFacingTarget(hrpCFrame, targetPos)
     return lookVector:Dot(dir) > 0.5
 end
 
--- Semi-Stealth Magnet (from your code)
-local function semiStealthMagnet()
-    local lpChar = player.Character
-    if not lpChar then return end
-    local left = lpChar:FindFirstChild("CatchLeft")
-    local right = lpChar:FindFirstChild("CatchRight")
-    if not (left and right) then return end
+local function applyMagnet(ball, targetPos)
+    local bv = ball:FindFirstChild(magnetBodyVelocityName)
+    if not bv then
+        bv = Instance.new("BodyVelocity")
+        bv.Name = magnetBodyVelocityName
+        bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        bv.P = 1250
+        bv.Parent = ball
+    end
+    bv.Velocity = (targetPos - ball.Position) * 20
+end
 
-    local mid = left.Position:Lerp(right.Position, 0.5)
-    local ball = workspace:FindFirstChild("Football") or workspace:FindFirstChildWhichIsA("Tool")
-    if not ball or not ball:IsDescendantOf(workspace) then return end
+local function removeMagnet(ball)
+    local bv = ball:FindFirstChild(magnetBodyVelocityName)
+    if bv then bv:Destroy() end
+end
 
-    local dist = (ball.Position - mid).Magnitude
-    if dist <= 28 then -- semi-stealth range
-        local target = mid + Vector3.new(0, -1.1, -0.8)
-        ball.CFrame = CFrame.new(target)
-        ball.Velocity = Vector3.zero
+local function freezePlayer(duration)
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local startTime = tick()
+    while tick() - startTime < duration do
+        hrp.Velocity = Vector3.new(0,0,0)
+        hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+        task.wait()
     end
 end
 
--- Main Magnet Heartbeat Loop
 RunService.Heartbeat:Connect(function()
-    if not settings.magnetEnabled then return end
-
+    if not settings.magnetEnabled and not settings.autoCatch then return end
     local ball = getBall()
     local char = player.Character
     if not ball or not char then return end
@@ -282,145 +333,152 @@ RunService.Heartbeat:Connect(function()
     local now = tick()
     if now - lastCatch < catchCooldown then return end
 
-    if settings.magnetMode == "Semi-Stealth" then
-        semiStealthMagnet()
-        lastCatch = now
+    if settings.freezeTech and now < freezeUntil then
+        -- Freeze player
+        hrp.Velocity = Vector3.new(0,0,0)
+        hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
         return
     end
-
-    local catchLeftPos, catchRightPos = getCatchPositions(char)
-    if not (catchLeftPos and catchRightPos) then return end
 
     local predictedPos = ball.Position + (ball.AssemblyLinearVelocity * 0.15)
     local distPredicted = (predictedPos - hrp.Position).Magnitude
 
-    if distPredicted > settings.magnetRange then return end
+    local facing = true
+    if settings.angleEnhancer then
+        facing = isFacingTarget(hrp.CFrame, ball.Position)
+    end
 
-    local facing = isFacingTarget(hrp.CFrame, ball.Position)
+    if settings.magnetEnabled and distPredicted <= settings.magnetRange and facing then
+        if settings.magnetMode == "Semi-Stealth" then
+            -- Use your custom semi stealth magnet: teleport ball near player's mid catch spot with no float or lag
+            local mid = getMid()
+            local dist = (ball.Position - mid).Magnitude
+            if dist <= 28 then
+                local target = mid + Vector3.new(0, -1.1, -0.8)
+                ball.CFrame = CFrame.new(target)
+                ball.Velocity = Vector3.zero
+            end
+            removeMagnet(ball) -- remove any BodyVelocity if exists
+        else
+            -- Other magnet modes apply BodyVelocity pulling ball towards catch position
+            local catchLeft = char:FindFirstChild("CatchLeft")
+            local catchRight = char:FindFirstChild("CatchRight")
+            if not catchLeft or not catchRight then return end
 
-    if settings.magnetMode == "Legit" and facing then
-        -- Pull ball smoothly to one catch position or the other, closer side
-        local targetPos = (predictedPos - catchLeftPos).Magnitude < (predictedPos - catchRightPos).Magnitude and catchLeftPos or catchRightPos
-        local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
-        if not bv then
-            bv = Instance.new("BodyVelocity")
-            bv.Name = "FriedHubMagnetBodyVelocity"
-            bv.MaxForce = Vector3.new(1e5,1e5,1e5)
-            bv.Parent = ball
+            local targetPos
+            if settings.magnetMode == "Legit" then
+                targetPos = catchLeft.Position:Lerp(catchRight.Position, 0.5)
+            elseif settings.magnetMode == "Blatant" then
+                targetPos = hrp.Position + Vector3.new(0, 3, 0)
+            elseif settings.magnetMode == "League" then
+                targetPos = hrp.Position
+            else
+                targetPos = hrp.Position
+            end
+
+            applyMagnet(ball, targetPos)
         end
-        bv.Velocity = (targetPos - ball.Position) * 30
-        lastCatch = now
-    elseif settings.magnetMode == "Blatant" then
-        -- Teleport ball directly to catch center
-        ball.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 3, 0))
-        lastCatch = now
-    elseif settings.magnetMode == "League" then
-        -- Pull ball using BodyVelocity but faster than Legit
-        local targetPos = hrp.Position + Vector3.new(0, 3, 0)
-        local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
-        if not bv then
-            bv = Instance.new("BodyVelocity")
-            bv.Name = "FriedHubMagnetBodyVelocity"
-            bv.MaxForce = Vector3.new(1e6,1e6,1e6)
-            bv.Parent = ball
-        end
-        bv.Velocity = (targetPos - ball.Position) * 60
-        lastCatch = now
+    else
+        if ball then removeMagnet(ball) end
     end
 end)
 
-print("[FriedHub] Part 1 loaded.")-- Part 2: Ball ESP + Ball Path Prediction + Jump Boost + Anti-Jam
+-- Freeze Tech Coroutine
+RunService.Heartbeat:Connect(function()
+    if settings.freezeTech then
+        local now = tick()
+        if now > freezeUntil then
+            -- Not freezing
+            return
+        else
+            local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                hrp.Velocity = Vector3.new(0,0,0)
+                hrp.AssemblyLinearVelocity = Vector3.new(0,0,0)
+            end
+        end
+    end
+end)
 
-local Players = game:GetService("Players")
+-- Freeze Tech activation example (you can trigger this elsewhere)
+--[[
+if settings.freezeTech then
+    freezeUntil = tick() + settings.freezeTime
+end
+]]
+
+-- Jump Boost & Anti Jam Logic
+
+RunService.Heartbeat:Connect(function()
+    if not settings.jumpBoost and not settings.antiJam then return end
+    local ball = getBall()
+    local char = player.Character
+    if not-- FriedHub FF2 - Part 3: Ball ESP, Ball Path Prediction, Anti Jam & Utility
+
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 local TweenService = game:GetService("TweenService")
 
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local hrp = character:WaitForChild("HumanoidRootPart")
+local settings = {
+    esp = true,
+    ballPath = true,
+    antiJam = true,
+}
 
--- Settings (should sync with Part 1 if needed)
-local jumpBoostAmount = 10
-local jumpCooldown = 2 -- seconds between boosts
-local lastJumpTime = 0
-
-local ballESPEnabled = true -- could be toggled from GUI later
-local ballPathPredictionEnabled = true -- could be toggled from GUI later
-
--- Ball ESP Setup
-local ballHighlight = nil
-local function setupBallESP(ball)
-    if ballHighlight then
-        ballHighlight.Adornee = ball
-        return
+-- Ball ESP implementation
+local ballEspPart
+local function createBallESP()
+    local ball = Workspace:FindFirstChild("Football")
+    if ball and not ballEspPart then
+        ballEspPart = Instance.new("Highlight")
+        ballEspPart.FillColor = Color3.fromRGB(255, 140, 0)
+        ballEspPart.FillTransparency = 0.5
+        ballEspPart.OutlineTransparency = 1
+        ballEspPart.Parent = ball
     end
-
-    local Highlight = Instance.new("Highlight")
-    Highlight.Name = "FriedHubBallHighlight"
-    Highlight.Adornee = ball
-    Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    Highlight.FillColor = Color3.fromRGB(255, 125, 0)
-    Highlight.FillTransparency = 0.3
-    Highlight.OutlineColor = Color3.fromRGB(255, 125, 0)
-    Highlight.OutlineTransparency = 0
-    Highlight.Parent = ball
-    ballHighlight = Highlight
 end
 
 local function removeBallESP()
-    if ballHighlight then
-        ballHighlight:Destroy()
-        ballHighlight = nil
+    if ballEspPart then
+        ballEspPart:Destroy()
+        ballEspPart = nil
     end
 end
 
--- Ball Path Prediction Variables
+-- Ball Path Prediction
 local Gravity = Vector3.new(0, -28, 0)
 local SegmentCount = 160
 local TimeStep = 0.035
-
+local UseTrail = true
 local beams = {}
 local attachments = {}
-
-local function clearBeams()
-    for _, beam in ipairs(beams) do
-        beam:Destroy()
-    end
-    for _, att in ipairs(attachments) do
-        att:Destroy()
-    end
-    beams = {}
-    attachments = {}
-end
 
 local function getTrajectory(startPos, velocity)
     local pos, vel = startPos, velocity
     local points = {pos}
-    for _ = 1, SegmentCount do
-        vel = vel + Gravity * TimeStep
-        pos = pos + vel * TimeStep
+    for _=1, SegmentCount do
+        vel += Gravity * TimeStep
+        pos += vel * TimeStep
         table.insert(points, pos)
-        if pos.Y < 0 then
-            break
-        end
+        if pos.Y < 0 then break end
     end
     return points, pos
 end
 
 local function makeArc(points, color)
-    clearBeams()
-    local newAtts, newBeams = {}, {}
+    local atts, beams = {}, {}
     for _, p in ipairs(points) do
         local a = Instance.new("Attachment")
         a.WorldPosition = p
-        a.Parent = workspace.Terrain
-        table.insert(newAtts, a)
+        a.Parent = Workspace.Terrain
+        table.insert(atts, a)
     end
-    for i = 1, #newAtts - 1 do
+    for i=1, #atts-1 do
         local b = Instance.new("Beam")
-        b.Attachment0 = newAtts[i]
-        b.Attachment1 = newAtts[i + 1]
+        b.Attachment0 = atts[i]
+        b.Attachment1 = atts[i+1]
         b.Width0 = 0.85
         b.Width1 = 0.85
         b.Color = ColorSequence.new(color)
@@ -428,12 +486,20 @@ local function makeArc(points, color)
         b.LightEmission = 0.5
         b.Segments = 2
         b.FaceCamera = true
-        b.Parent = workspace.Terrain
-        table.insert(newBeams, b)
+        b.Parent = Workspace.Terrain
+        table.insert(beams, b)
     end
-    beams = newBeams
-    attachments = newAtts
-    return beams, attachments
+    return beams, atts
+end
+
+local function glowLoop(beams)
+    task.spawn(function()
+        local info = TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+        for _, b in ipairs(beams) do
+            TweenService:Create(b, info, {LightEmission = 2}):Play()
+        end
+        while beams[1] and beams[1].Parent do task.wait() end
+    end)
 end
 
 local function ringMarker(pos, color)
@@ -445,7 +511,7 @@ local function ringMarker(pos, color)
     ring.Position = pos + Vector3.new(0, 0.1, 0)
     ring.Material = Enum.Material.Neon
     ring.Color = color
-    ring.Parent = workspace.Terrain
+    ring.Parent = Workspace.Terrain
 
     local mesh = Instance.new("SpecialMesh", ring)
     mesh.MeshType = Enum.MeshType.Cylinder
@@ -459,7 +525,7 @@ end
 local function addTrail(part)
     local a0 = Instance.new("Attachment", part)
     local a1 = Instance.new("Attachment")
-    a1.Parent = workspace.Terrain
+    a1.Parent = Workspace.Terrain
     local beam = Instance.new("Beam")
     beam.Attachment0 = a0
     beam.Attachment1 = a1
@@ -469,13 +535,13 @@ local function addTrail(part)
     beam.LightInfluence = 0
     beam.Segments = 2
     beam.Color = ColorSequence.new(Color3.fromRGB(255, 125, 0))
-    beam.Transparency = NumberSequence.new(0, 1)
+    beam.Transparency = NumberSequence.new(0,1)
     beam.FaceCamera = true
     beam.Parent = part
 
     local con
     con = RunService.Heartbeat:Connect(function()
-        if part and part.Parent == workspace then
+        if part and part.Parent == Workspace then
             a1.WorldPosition = part.Position - part.Velocity.Unit * 2
         else
             beam:Destroy()
@@ -486,103 +552,222 @@ local function addTrail(part)
     end)
 end
 
-local function fadeOutBeams(duration)
+local function fadeOutBeams(beams, duration)
     task.spawn(function()
         local steps = 30
-        for step = 1, steps do
-            local t = step / steps
+        for step=1, steps do
+            local t = step/steps
             for _, b in ipairs(beams) do
                 b.Transparency = NumberSequence.new(t)
             end
-            task.wait(duration / steps)
+            task.wait(duration/steps)
         end
         for _, b in ipairs(beams) do
             b.Transparency = NumberSequence.new(1)
         end
-        clearBeams()
     end)
 end
 
--- Jump Boost + Anti-Jam logic
-local function applyJumpBoost()
-    local now = tick()
-    if now - lastJumpTime < jumpCooldown then
-        return
-    end
+local currentBeams = {}
+local currentAtts = {}
 
-    if humanoid and humanoid.FloorMaterial ~= Enum.Material.Air then
-        humanoid.JumpPower = humanoid.JumpPower + jumpBoostAmount
-        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        -- Reset jump power smoothly after 0.5 seconds
-        task.delay(0.5, function()
-            if humanoid then
-                humanoid.JumpPower = 50 -- default jump power, adjust if your game uses different
-            end
-        end)
-        lastJumpTime = now
-    end
-end
-
--- Monitor ball and apply effects
-local ball = workspace:FindFirstChild("Football")
-
-workspace.ChildAdded:Connect(function(child)
+Workspace.ChildAdded:Connect(function(child)
     if child.Name == "Football" and child:IsA("BasePart") then
-        ball = child
+        task.wait()
+        RunService.Heartbeat:Wait()
+        local velocity = child.AssemblyLinearVelocity
+        local color = Color3.fromRGB(255, 125, 0) -- Orange
 
-        if ballESPEnabled then
-            setupBallESP(ball)
-        end
+        if not settings.ballPath then return end
 
-        -- Path prediction arc and effects
-        task.spawn(function()
-            while ball and ball.Parent == workspace do
-                RunService.Heartbeat:Wait()
-                local velocity = ball.AssemblyLinearVelocity
-                if ballPathPredictionEnabled then
-                    local points, landing = getTrajectory(ball.Position, velocity)
-                    makeArc(points, Color3.fromRGB(255, 125, 0))
-                    ringMarker(landing, Color3.fromRGB(255, 125, 0))
-                    addTrail(ball)
-                end
+        local points, landing = getTrajectory(child.Position, velocity)
+        currentBeams, currentAtts = makeArc(points, color)
+        glowLoop(currentBeams)
+        ringMarker(landing, color)
+        if UseTrail then addTrail(child) end
 
-                -- Jump Boost: when ball close to player within range 10 studs, boost jump once
-                if (ball.Position - hrp.Position).Magnitude < 10 then
-                    applyJumpBoost()
-                end
+        local con
+        con = RunService.Heartbeat:Connect(function()
+            if child.Velocity.Magnitude < 1 then
+                fadeOutBeams(currentBeams, 1)
+                for _, a in ipairs(currentAtts) do a:Destroy() end
+                con:Disconnect()
             end
-            fadeOutBeams(1)
-            removeBallESP()
         end)
+
+        repeat task.wait() until not child or child.Parent ~= Workspace
+        fadeOutBeams(currentBeams, 0.3)
+        for _, a in ipairs(currentAtts) do a:Destroy() end
     end
 end)
 
--- Also monitor if ball already exists on script start
-if ball then
-    setupBallESP(ball)
-end
+-- Anti Jam Implementation
 
-print("[FriedHub] Part 2 loaded.")-- Part 3: Long Arms, Auto Catch, Auto Rush, Low Graphics
+local lastCatchTime = 0
+local catchCooldown = 0.25
 
-local Players = game:GetService("Players")
+RunService.Heartbeat:Connect(function()
+    if not settings.antiJam then return end
+    local ball = Workspace:FindFirstChild("Football")
+    local char = LocalPlayer.Character
+    if not ball or not char then return end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local dist = (ball.Position - hrp.Position).Magnitude
+    if dist < 6 then
+        local now = tick()
+        if now - lastCatchTime > catchCooldown then
+            lastCatchTime = now
+            -- Simple anti-jam: briefly apply upward force to HRP to avoid stuck
+            hrp.Velocity = Vector3.new(hrp.Velocity.X, 30, hrp.Velocity.Z)
+        end
+    end
+end)
+
+-- Ball ESP toggle logic
+RunService.Heartbeat:Connect(function()
+    if settings.esp then
+        createBallESP()
+    else
+        removeBallESP()
+    end
+end)-- FriedHub FF2 - Part 4: Jump Boost, Freeze Tech, Angle Enhancer & Utilities
+
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
-local hrp = character:WaitForChild("HumanoidRootPart")
+local LocalPlayer = Players.LocalPlayer
 
 local settings = {
-    longArms = false,
-    autoCatch = false,
-    autoRush = false,
-    lowGraphics = false,
+    jumpBoostEnabled = true,
+    jumpBoostAmount = 10,
+    freezeTech = false,
+    freezeDuration = 2,
+    angleEnhancer = true,
 }
 
--- Long Arms Implementation
-local function setLongArms(state)
-    local char = player.Character
+local freezeActive = false
+
+-- Jump Boost on Ball Catch
+local function jumpBoostOnCatch()
+    local char = LocalPlayer.Character
     if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if hrp and humanoid then
+        -- Apply upward velocity boost
+        hrp.Velocity = Vector3.new(hrp.Velocity.X, settings.jumpBoostAmount, hrp.Velocity.Z)
+    end
+end
+
+-- Freeze Tech - freezes player for freezeDuration seconds
+local function activateFreezeTech()
+    if freezeActive or not settings.freezeTech then return end
+    freezeActive = true
+
+    local char = LocalPlayer.Character
+    if not char then freezeActive = false return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then freezeActive = false return end
+
+    -- Store original walkspeed and jump power
+    local origWS = humanoid.WalkSpeed
+    local origJP = humanoid.JumpPower
+
+    -- Freeze by setting walk speed and jump power to 0
+    humanoid.WalkSpeed = 0
+    humanoid.JumpPower = 0
+
+    task.delay(settings.freezeDuration, function()
+        if humanoid then
+            humanoid.WalkSpeed = origWS
+            humanoid.JumpPower = origJP
+        end
+        freezeActive = false
+    end)
+end
+
+-- Angle Enhancer: boosts jump height and dive distance only when jumping or diving
+-- Improves jump height by temporarily increasing Humanoid.JumpPower during jump
+
+local jumpPowerBoostAmount = 15  -- How much extra jump power to add when angle enhancer is active
+local isJumping = false
+
+local function angleEnhancerLogic()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+
+    if settings.angleEnhancer then
+        -- Detect jump start
+        if humanoid:GetState() == Enum.HumanoidStateType.Jumping and not isJumping then
+            isJumping = true
+            local origJP = humanoid.JumpPower
+            humanoid.JumpPower = origJP + jumpPowerBoostAmount
+
+            -- After short delay reset jump power back
+            task.delay(0.2, function()
+                if humanoid then
+                    humanoid.JumpPower = origJP
+                    isJumping = false
+                end
+            end)
+        end
+    else
+        -- If disabled, reset jump power to default
+        if isJumping then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.JumpPower = 50 -- default, adjust if needed
+            end
+            isJumping = false
+        end
+    end
+end
+
+-- Connect to RunService Heartbeat for continuous checking
+RunService.Heartbeat:Connect(function()
+    angleEnhancerLogic()
+end)
+
+-- Hook into ball catch to apply jump boost and freeze tech
+
+local lastCatchTick = 0
+local catchCooldown = 0.3
+
+RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local ball = workspace:FindFirstChild("Football")
+    if not ball then return end
+
+    local dist = (ball.Position - hrp.Position).Magnitude
+    if dist < 6 then -- Close enough to "catch"
+        local now = tick()
+        if now - lastCatchTick > catchCooldown then
+            lastCatchTick = now
+            if settings.jumpBoostEnabled then
+                jumpBoostOnCatch()
+            end
+            if settings.freezeTech then
+                activateFreezeTech()
+            end
+        end
+    end
+end)
+
+-- Utility: Automatically reset long arms size when toggled (can be handled elsewhere in GUI)
+local function resetArms(state)
+    local char = LocalPlayer.Character
+    if not char then return end
+
     for _, limbName in pairs({"Left Arm", "Right Arm"}) do
         local limb = char:FindFirstChild(limbName)
         if limb and limb:IsA("BasePart") then
@@ -595,334 +780,52 @@ local function setLongArms(state)
     end
 end
 
--- Auto Catch Implementation
-local function getBall()
-    return workspace:FindFirstChild("Football")
-end
-
-local catchCooldown = 0.2
-local lastCatch = 0
-
-local function tryAutoCatch()
-    local ball = getBall()
-    local char = player.Character
-    if not ball or not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    local now = tick()
-    if now - lastCatch < catchCooldown then return end
-
-    local dist = (ball.Position - hrp.Position).Magnitude
-    if dist < 10 then
-        local catchLeft = char:FindFirstChild("CatchLeft")
-        local catchRight = char:FindFirstChild("CatchRight")
-        if catchLeft and catchRight then
-            -- Move ball to closest catch position instantly (semi-stealth catch)
-            local leftDist = (ball.Position - catchLeft.Position).Magnitude
-            local rightDist = (ball.Position - catchRight.Position).Magnitude
-            local targetPos = (leftDist < rightDist) and catchLeft.Position or catchRight.Position
-            ball.CFrame = CFrame.new(targetPos)
-            ball.Velocity = Vector3.zero
-            lastCatch = now
-        end
-    end
-end
-
--- Auto Rush Implementation
-local autoRushSpeed = 20
-local autoRushConnection = nil
-
-local function setAutoRush(state)
-    if state then
-        if autoRushConnection then return end
-        autoRushConnection = RunService.Heartbeat:Connect(function()
-            local char = player.Character
-            if char then
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    hrp.Velocity = Vector3.new(0, hrp.Velocity.Y, autoRushSpeed)
-                end
-            end
-        end)
-    else
-        if autoRushConnection then
-            autoRushConnection:Disconnect()
-            autoRushConnection = nil
-        end
-    end
-end
-
--- Low Graphics Implementation
-local function setLowGraphics(state)
-    if state then
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then
-                obj.Material = Enum.Material.SmoothPlastic
-                obj.Reflectance = 0
-            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
-                obj.Enabled = false
-            end
-        end
-        game.Lighting.GlobalShadows = false
-    else
-        for _, obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then
-                obj.Material = Enum.Material.Plastic
-            elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
-                obj.Enabled = true
-            end
-        end
-        game.Lighting.GlobalShadows = true
-    end
-end
-
--- Run a loop to handle auto catch continuously
-RunService.Heartbeat:Connect(function()
-    if settings.autoCatch then
-        tryAutoCatch()
-    end
-end)
-
--- Example of GUI toggle callbacks (to be connected to your GUI later)
-local function onLongArmsToggle(value)
-    settings.longArms = value
-    setLongArms(value)
-end
-
-local function onAutoCatchToggle(value)
-    settings.autoCatch = value
-end
-
-local function onAutoRushToggle(value)
-    settings.autoRush = value
-    setAutoRush(value)
-end
-
-local function onLowGraphicsToggle(value)
-    settings.lowGraphics = value
-    setLowGraphics(value)
-end
-
--- Initial setup calls if needed
-if settings.longArms then setLongArms(true) end
-if settings.autoRush then setAutoRush(true) end
-if settings.lowGraphics then setLowGraphics(true) end
-
-print("[FriedHub] Part 3 loaded.")-- Part 4: Freeze Tech, Magnet Modes, Enhanced Angle Enhancer (with jump boost), Misc
+return {
+    resetArms = resetArms,
+    settings = settings,
+}-- WALKSPEED SYSTEM (SAFE) -- FriedHub
+getgenv().walktoggle = true -- Toggle ON/OFF
+getgenv().walkspeed = 20 -- Set safe walk speed here
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local hrp = character:WaitForChild("HumanoidRootPart")
-local humanoid = character:WaitForChild("Humanoid")
 
-local settings = {
-    freezeTech = false,
-    freezeTime = 2,
-    magnetEnabled = true,
-    magnetMode = "Legit", -- "Legit", "Blatant", "League", "Semi-Stealth"
-    angleEnhancer = true,
-    jumpBoostOnCatch = true,
-    jumpBoostAmount = 10,
-}
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HRP = Character:WaitForChild("HumanoidRootPart")
 
--- Freeze Tech Implementation
-local freezeConnection = nil
-local function freezeCharacter(duration)
-    if freezeConnection then
-        freezeConnection:Disconnect()
-        freezeConnection = nil
+local walkLoop
+
+function enableWalkSpeed()
+    if walkLoop then
+        task.cancel(walkLoop)
     end
 
-    local originalWalkSpeed = humanoid.WalkSpeed
-    local originalJumpPower = humanoid.JumpPower
-
-    humanoid.WalkSpeed = 0
-    humanoid.JumpPower = 0
-
-    freezeConnection = RunService.Heartbeat:Connect(function()
-        humanoid.WalkSpeed = 0
-        humanoid.JumpPower = 0
-        hrp.Velocity = Vector3.new(0,0,0)
-        hrp.RotVelocity = Vector3.new(0,0,0)
-    end)
-
-    task.delay(duration, function()
-        if freezeConnection then
-            freezeConnection:Disconnect()
-            freezeConnection = nil
-        end
-        humanoid.WalkSpeed = originalWalkSpeed
-        humanoid.JumpPower = originalJumpPower
-    end)
-end
-
--- Magnet Modes
-
-local function getCatchPositions()
-    local catchLeft = character:FindFirstChild("CatchLeft")
-    local catchRight = character:FindFirstChild("CatchRight")
-    return catchLeft, catchRight
-end
-
-local magRange = 50
-
-local function semiStealthMagnet(ball)
-    local catchLeft, catchRight = getCatchPositions()
-    if not catchLeft or not catchRight then return end
-
-    local mid = catchLeft.Position:Lerp(catchRight.Position, 0.5)
-    local dist = (ball.Position - mid).Magnitude
-    if dist <= 28 then
-        local target = mid + Vector3.new(0, -1.1, -0.8)
-        ball.CFrame = CFrame.new(target)
-        ball.Velocity = Vector3.zero
-    end
-end
-
-local function blatantMagnet(ball)
-    local catchLeft, catchRight = getCatchPositions()
-    if not catchLeft or not catchRight then return end
-
-    local targetPos = catchLeft.Position:Lerp(catchRight.Position, 0.5)
-    local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
-    if not bv then
-        bv = Instance.new("BodyVelocity")
-        bv.Name = "FriedHubMagnetBodyVelocity"
-        bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-        bv.Parent = ball
-    end
-    bv.Velocity = (targetPos - ball.Position) * 50
-end
-
-local function legitMagnet(ball)
-    local catchLeft, catchRight = getCatchPositions()
-    if not catchLeft or not catchRight then return end
-
-    local targetPos = catchLeft.Position:Lerp(catchRight.Position, 0.5)
-    local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
-    if not bv then
-        bv = Instance.new("BodyVelocity")
-        bv.Name = "FriedHubMagnetBodyVelocity"
-        bv.MaxForce = Vector3.new(1e4, 1e4, 1e4)
-        bv.Parent = ball
-    end
-    bv.Velocity = (targetPos - ball.Position) * 20
-end
-
-local function leagueMagnet(ball)
-    local catchLeft, catchRight = getCatchPositions()
-    if not catchLeft or not catchRight then return end
-
-    local targetPos = catchLeft.Position:Lerp(catchRight.Position, 0.5)
-    ball.CFrame = CFrame.new(targetPos)
-    ball.Velocity = Vector3.zero
-end
-
--- Enhanced Angle Enhancer + Jump Boost
-
-local lastJumpBoostTime = 0
-local jumpBoostCooldown = 1 -- seconds between boosts
-
-local function enhanceAngleAndJump(ball)
-    if not settings.angleEnhancer then return end
-    if not ball then return end
-    local char = character
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    -- Face the ball smoothly
-    local toBall = (ball.Position - hrp.Position).Unit
-    local lookVector = hrp.CFrame.LookVector
-    local dot = lookVector:Dot(toBall)
-    if dot < 0.7 then
-        local newCFrame = CFrame.new(hrp.Position, ball.Position)
-        hrp.CFrame = hrp.CFrame:Lerp(newCFrame, 0.2)
-    end
-
-    -- Jump boost logic when ball close
-    if settings.jumpBoostOnCatch then
-        local catchLeft, catchRight = getCatchPositions()
-        if catchLeft and catchRight then
-            local mid = catchLeft.Position:Lerp(catchRight.Position, 0.5)
-            local dist = (ball.Position - mid).Magnitude
-            local now = tick()
-
-            if dist < 10 and (now - lastJumpBoostTime) > jumpBoostCooldown then
-                if humanoid.FloorMaterial ~= Enum.Material.Air then
-                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                    humanoid.JumpPower = (humanoid.JumpPower or 50) + settings.jumpBoostAmount
-                    lastJumpBoostTime = now
-                    -- Reset JumpPower to default after short delay
-                    task.delay(0.5, function()
-                        if humanoid then
-                            humanoid.JumpPower = 50
-                        end
-                    end)
-                end
+    walkLoop = RunService.Heartbeat:Connect(function()
+        if getgenv().walktoggle and Character and HRP and Humanoid then
+            local dir = Humanoid.MoveDirection
+            if dir.Magnitude > 0 then
+                HRP.Velocity = dir * getgenv().walkspeed + Vector3.new(0, HRP.Velocity.Y, 0)
             end
         end
+    end)
+end
+
+function disableWalkSpeed()
+    if walkLoop then
+        task.cancel(walkLoop)
+        walkLoop = nil
     end
 end
 
--- Magnet Loop
-RunService.Heartbeat:Connect(function()
-    if not settings.magnetEnabled then return end
-    local ball = workspace:FindFirstChild("Football")
-    if not ball then return end
-    local dist = (ball.Position - hrp.Position).Magnitude
-    if dist > magRange then
-        local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
-        if bv then bv:Destroy() end
-        return
-    end
+-- Activate
+enableWalkSpeed()
 
-    enhanceAngleAndJump(ball)
-
-    if settings.magnetMode == "Semi-Stealth" then
-        semiStealthMagnet(ball)
-    elseif settings.magnetMode == "Blatant" then
-        blatantMagnet(ball)
-    elseif settings.magnetMode == "Legit" then
-        legitMagnet(ball)
-    elseif settings.magnetMode == "League" then
-        leagueMagnet(ball)
-    end
+-- SAFE SHUTDOWN EXAMPLE
+-- Call this to stop movement override
+getgenv().ShutdownWalk = function()
+    getgenv().walktoggle = false
+    disableWalkSpeed()
+end
 end)
-
--- Example GUI callbacks:
-
-local function onFreezeTechToggle(state)
-    settings.freezeTech = state
-    if state then
-        freezeCharacter(settings.freezeTime)
-    end
-end
-
-local function onFreezeTimeChange(val)
-    settings.freezeTime = val
-end
-
-local function onMagnetEnabledToggle(state)
-    settings.magnetEnabled = state
-end
-
-local function onMagnetModeChange(mode)
-    settings.magnetMode = mode
-end
-
-local function onAngleEnhancerToggle(state)
-    settings.angleEnhancer = state
-end
-
-local function onJumpBoostToggle(state)
-    settings.jumpBoostOnCatch = state
-end
-
-local function onJumpBoostAmountChange(val)
-    settings.jumpBoostAmount = val
-end
-
-print("[FriedHub] Part 4 loaded with enhanced angle enhancer and jump boost.")
