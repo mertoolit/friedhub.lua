@@ -1,208 +1,396 @@
--- Football Fusion 2 - Undetectable Magnet + Full Features
+-- FriedHub FF2 Ultimate - Undetectable with visible GUI and anti-cheat bypass
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
-local settingsKey = "FF2_Settings"
-local settings = {
-    magnet = true,
-    autoCatch = true,
-    freezeTech = false,
-    freezeTime = 2,
-    esp = true,
-    path = true,
-    range = 45, -- Max 80
-    angleEnhancer = true
-}
 
-pcall(function()
-    if readfile then
-        local stored = HttpService:JSONDecode(readfile(settingsKey))
-        for k,v in pairs(stored) do settings[k] = v end
-    end
-end)
+-- Wrap everything in a local function to avoid polluting globals
+local function main()
+    -- Settings
+    local SETTINGS_KEY = "FriedHub_FF2_Settings"
 
-local function saveSettings()
+    local settings = {
+        magnetEnabled = true,
+        magnetMode = "Legit", -- Legit, Blatant, League
+        autoCatch = true,
+        freezeTech = false,
+        freezeTime = 2,
+        esp = true,
+        ballPath = true,
+        lowGraphics = false,
+        longArms = false,
+        magnetRange = 50,
+        angleEnhancer = true,
+    }
+
+    -- Load settings safely
     pcall(function()
-        if writefile then
-            writefile(settingsKey, HttpService:JSONEncode(settings))
+        if readfile and isfile and isfile(SETTINGS_KEY) then
+            local loaded = HttpService:JSONDecode(readfile(SETTINGS_KEY))
+            for k,v in pairs(loaded) do settings[k] = v end
         end
     end)
-end
 
--- GUI
-local gui = Instance.new("ScreenGui", game.CoreGui)
-gui.Name = "FF2_GUI"
-gui.ResetOnSpawn = false
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 280, 0, 420)
-frame.Position = UDim2.new(0, 10, 0, 10)
-frame.BackgroundColor3 = Color3.fromRGB(42, 75, 160)
-frame.BorderSizePixel = 0
-frame.Active = true
-frame.Draggable = true
-frame.Parent = gui
-
-local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, 0, 0, 30)
-title.BackgroundTransparency = 1
-title.Text = "FF2 Legit Mode"
-title.TextColor3 = Color3.new(1,1,1)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 18
-
-local yOffset = 35
-local function createToggle(name, default, callback)
-    local btn = Instance.new("TextButton", frame)
-    btn.Size = UDim2.new(1, -10, 0, 30)
-    btn.Position = UDim2.new(0, 5, 0, yOffset)
-    btn.Text = name .. ": " .. (default and "ON" or "OFF")
-    btn.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 14
-    btn.MouseButton1Click:Connect(function()
-        default = not default
-        btn.Text = name .. ": " .. (default and "ON" or "OFF")
-        callback(default)
-        saveSettings()
-    end)
-    yOffset += 35
-end
-
-local function createSliderBox(name, val, min, max, callback)
-    local box = Instance.new("TextBox", frame)
-    box.Position = UDim2.new(0, 5, 0, yOffset)
-    box.Size = UDim2.new(1, -10, 0, 30)
-    box.Text = name .. ": " .. val
-    box.BackgroundColor3 = Color3.fromRGB(40,40,40)
-    box.TextColor3 = Color3.new(1,1,1)
-    box.ClearTextOnFocus = true
-    box.Font = Enum.Font.Gotham
-    box.TextSize = 14
-    box.FocusLost:Connect(function(enter)
-        if enter then
-            local v = tonumber(box.Text:match("%d+"))
-            if v then
-                v = math.clamp(v, min, max)
-                box.Text = name .. ": " .. v
-                callback(v)
-                saveSettings()
-            else
-                box.Text = name .. ": " .. val
+    local function saveSettings()
+        pcall(function()
+            if writefile then
+                writefile(SETTINGS_KEY, HttpService:JSONEncode(settings))
             end
-        end
-    end)
-    yOffset += 35
-end
-
--- Create toggles/sliders
-createToggle("Magnet", settings.magnet, function(v) settings.magnet = v end)
-createToggle("Auto Catch", settings.autoCatch, function(v) settings.autoCatch = v end)
-createToggle("Freeze Tech", settings.freezeTech, function(v) settings.freezeTech = v end)
-createToggle("Ball ESP", settings.esp, function(v) settings.esp = v end)
-createToggle("Ball Path", settings.path, function(v) settings.path = v end)
-createToggle("Angle Enhancer", settings.angleEnhancer, function(v) settings.angleEnhancer = v end)
-createSliderBox("Magnet Range", settings.range, 5, 80, function(v) settings.range = v end)
-createSliderBox("Freeze Time", settings.freezeTime, 1, 5, function(v) settings.freezeTime = v end)
-
--- Key toggle
-local guiVisible = true
-UserInputService.InputBegan:Connect(function(i,gp)
-    if not gp and i.KeyCode == Enum.KeyCode.B then
-        guiVisible = not guiVisible
-        frame.Visible = guiVisible
+        end)
     end
-end)
 
--- Safe Magnet + Catch Logic
-task.spawn(function()
-    local lastCatch = 0
-    local catchCooldown = 0.15
+    -- GUI Setup (visible, draggable, no hide)
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "FriedHub_FF2"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Parent = game.CoreGui
 
-    while true do
-        task.wait()
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 400, 0, 460)
+    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -230)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(15,15,15)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Active = true
+    mainFrame.Draggable = true
+    mainFrame.Parent = ScreenGui
 
-        local ball = workspace:FindFirstChild("Football")
-        local char = player.Character
-        if not (settings.magnet or settings.autoCatch) or not ball or not char then continue end
+    local uicorner = Instance.new("UICorner", mainFrame)
+    uicorner.CornerRadius = UDim.new(0, 8)
 
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        local now = tick()
+    local title = Instance.new("TextLabel", mainFrame)
+    title.Size = UDim2.new(1, 0, 0, 40)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 22
+    title.TextColor3 = Color3.fromRGB(255, 140, 0)
+    title.Text = "FriedHub FF2 Ultimate"
+    title.TextStrokeTransparency = 0.6
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Position = UDim2.new(0, 15, 0, 0)
 
-        if hrp and (now - lastCatch) >= catchCooldown then
-            local predicted = ball.Position + (ball.AssemblyLinearVelocity * 0.15)
-            local dist = (predicted - hrp.Position).Magnitude
-            local isFacing = true
+    -- Tabs container
+    local tabsFrame = Instance.new("Frame", mainFrame)
+    tabsFrame.Size = UDim2.new(0, 110, 1, -40)
+    tabsFrame.Position = UDim2.new(0, 0, 0, 40)
+    tabsFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    tabsFrame.BorderSizePixel = 0
 
-            if settings.angleEnhancer then
-                local dir = (ball.Position - hrp.Position).Unit
-                isFacing = hrp.CFrame.LookVector:Dot(dir) > 0.5
+    local tabsUICorner = Instance.new("UICorner", tabsFrame)
+    tabsUICorner.CornerRadius = UDim.new(0, 8)
+
+    -- Pages container
+    local pagesFrame = Instance.new("Frame", mainFrame)
+    pagesFrame.Size = UDim2.new(1, -110, 1, -40)
+    pagesFrame.Position = UDim2.new(0, 110, 0, 40)
+    pagesFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    pagesFrame.BorderSizePixel = 0
+
+    local pagesUICorner = Instance.new("UICorner", pagesFrame)
+    pagesUICorner.CornerRadius = UDim.new(0, 8)
+
+    local tabNames = {"Magnet", "Misc", "ESP"}
+    local tabs = {}
+    local pages = {}
+    local selectedTab = nil
+
+    local function selectTab(name)
+        for tabName, btn in pairs(tabs) do
+            btn.BackgroundColor3 = (tabName == name) and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(30,30,30)
+            btn.TextColor3 = (tabName == name) and Color3.new(1,1,1) or Color3.fromRGB(180,180,180)
+        end
+        for pageName, page in pairs(pages) do
+            page.Visible = (pageName == name)
+        end
+        selectedTab = name
+    end
+
+    for i, tabName in ipairs(tabNames) do
+        local btn = Instance.new("TextButton", tabsFrame)
+        btn.Size = UDim2.new(1, 0, 0, 40)
+        btn.Position = UDim2.new(0, 0, 0, (i-1)*40)
+        btn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+        btn.Font = Enum.Font.GothamSemibold
+        btn.TextSize = 16
+        btn.Text = tabName
+        btn.TextColor3 = Color3.fromRGB(180,180,180)
+        btn.BorderSizePixel = 0
+
+        btn.MouseButton1Click:Connect(function()
+            selectTab(tabName)
+        end)
+
+        tabs[tabName] = btn
+
+        local page = Instance.new("ScrollingFrame", pagesFrame)
+        page.Size = UDim2.new(1, 0, 1, 0)
+        page.Position = UDim2.new(0, 0, 0, 0)
+        page.BackgroundTransparency = 1
+        page.ScrollBarThickness = 6
+        page.Visible = false
+        page.CanvasSize = UDim2.new(0, 0, 0, 0)
+        pages[tabName] = page
+    end
+
+    selectTab(tabNames[1])
+
+    -- Helpers for toggles and sliders
+    local function createToggle(parent, text, initial, callback)
+        local btn = Instance.new("TextButton", parent)
+        btn.Size = UDim2.new(1, -20, 0, 30)
+        btn.Position = UDim2.new(0, 10, 0, (#parent:GetChildren())*35)
+        btn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        btn.TextColor3 = Color3.new(1,1,1)
+        btn.Font = Enum.Font.Gotham
+        btn.TextSize = 14
+        btn.AutoButtonColor = false
+
+        local enabled = initial
+        btn.Text = text .. ": " .. (enabled and "ON" or "OFF")
+
+        btn.MouseButton1Click:Connect(function()
+            enabled = not enabled
+            btn.Text = text .. ": " .. (enabled and "ON" or "OFF")
+            callback(enabled)
+            saveSettings()
+        end)
+        return btn
+    end
+
+    local function createSlider(parent, text, initial, min, max, callback)
+        local frame = Instance.new("Frame", parent)
+        frame.Size = UDim2.new(1, -20, 0, 40)
+        frame.Position = UDim2.new(0, 10, 0, (#parent:GetChildren())*40)
+
+        local label = Instance.new("TextLabel", frame)
+        label.Size = UDim2.new(1, 0, 0, 18)
+        label.BackgroundTransparency = 1
+        label.TextColor3 = Color3.new(1,1,1)
+        label.Font = Enum.Font.Gotham
+        label.TextSize = 14
+        label.Text = text .. ": " .. tostring(initial)
+        label.TextXAlignment = Enum.TextXAlignment.Left
+
+        local slider = Instance.new("TextBox", frame)
+        slider.Size = UDim2.new(1, 0, 0, 18)
+        slider.Position = UDim2.new(0, 0, 0, 20)
+        slider.BackgroundColor3 = Color3.fromRGB(40,40,40)
+        slider.TextColor3 = Color3.new(1,1,1)
+        slider.Font = Enum.Font.Gotham
+        slider.TextSize = 14
+        slider.Text = tostring(initial)
+        slider.ClearTextOnFocus = true
+
+        slider.FocusLost:Connect(function(enterPressed)
+            if enterPressed then
+                local val = tonumber(slider.Text)
+                if val then
+                    val = math.clamp(val, min, max)
+                    slider.Text = tostring(val)
+                    label.Text = text .. ": " .. val
+                    callback(val)
+                    saveSettings()
+                else
+                    slider.Text = tostring(initial)
+                end
+            else
+                slider.Text = tostring(initial)
             end
+        end)
+        return frame
+    end
 
-            if isFacing and dist <= settings.range and settings.magnet then
-                local bv = ball:FindFirstChild("MagPull") or Instance.new("BodyVelocity", ball)
-                bv.Name = "MagPull"
-                bv.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                bv.Velocity = (hrp.Position - ball.Position).Unit * 55
-                game.Debris:AddItem(bv, 0.2)
-                lastCatch = now
+    -- Populate Magnet tab
+    createToggle(pages["Magnet"], "Enable Magnet", settings.magnetEnabled, function(v) settings.magnetEnabled = v end)
 
-                if settings.freezeTech then
-                    hrp.Anchored = true
-                    task.delay(settings.freezeTime, function()
-                        if hrp and hrp.Parent then hrp.Anchored = false end
-                    end)
+    -- Magnet Mode Dropdown (cycling button)
+    do
+        local modes = {"Legit", "Blatant", "League"}
+        local modeIdx = table.find(modes, settings.magnetMode) or 1
+
+        local dropdown = Instance.new("TextButton", pages["Magnet"])
+        dropdown.Size = UDim2.new(1, -20, 0, 30)
+        dropdown.Position = UDim2.new(0, 10, 0, (#pages["Magnet"]:GetChildren())*35)
+        dropdown.BackgroundColor3 = Color3.fromRGB(30,30,30)
+        dropdown.TextColor3 = Color3.new(1,1,1)
+        dropdown.Font = Enum.Font.Gotham
+        dropdown.TextSize = 14
+        dropdown.Text = "Magnet Mode: " .. modes[modeIdx]
+
+        dropdown.MouseButton1Click:Connect(function()
+            modeIdx = modeIdx + 1
+            if modeIdx > #modes then modeIdx = 1 end
+            dropdown.Text = "Magnet Mode: " .. modes[modeIdx]
+            settings.magnetMode = modes[modeIdx]
+            saveSettings()
+        end)
+    end
+
+    createToggle(pages["Magnet"], "Auto Catch", settings.autoCatch, function(v) settings.autoCatch = v end)
+    createToggle(pages["Magnet"], "Freeze Tech", settings.freezeTech, function(v) settings.freezeTech = v end)
+    createSlider(pages["Magnet"], "Freeze Time (sec)", settings.freezeTime, 1, 5, function(v) settings.freezeTime = v end)
+    createSlider(pages["Magnet"], "Magnet Range", settings.magnetRange, 10, 80, function(v) settings.magnetRange = v end)
+    createToggle(pages["Magnet"], "Angle Enhancer", settings.angleEnhancer, function(v) settings.angleEnhancer = v end)
+
+    -- Misc tab toggles
+    createToggle(pages["Misc"], "Low Graphics", settings.lowGraphics, function(state)
+        settings.lowGraphics = state
+        saveSettings()
+        if state then
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("BasePart") then
+                    obj.Material = Enum.Material.SmoothPlastic
+                    obj.Reflectance = 0
+                elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") then
+                    obj.Enabled = false
+                end
+            end
+            game.Lighting.GlobalShadows = false
+        else
+            game.Lighting.GlobalShadows = true
+            -- Optionally reload materials or effects if needed
+        end
+    end)
+
+    createToggle(pages["Misc"], "Long Arms", settings.longArms, function(state)
+        settings.longArms = state
+        saveSettings()
+        local char = player.Character
+        if char then
+            for _, limbName in pairs({"Left Arm","Right Arm"}) do
+                local limb = char:FindFirstChild(limbName)
+                if limb and limb:IsA("BasePart") then
+                    if state then
+                        limb.Size = Vector3.new(2,5,2)
+                    else
+                        limb.Size = Vector3.new(2,2,1)
+                    end
                 end
             end
         end
-    end
-end)
+    end)
 
--- ESP
-RunService.RenderStepped:Connect(function()
-    if settings.esp then
-        local ball = workspace:FindFirstChild("Football")
-        if ball and not ball:FindFirstChild("Highlight") then
-            local h = Instance.new("Highlight", ball)
-            h.FillColor = Color3.fromRGB(255,255,0)
-            h.OutlineColor = Color3.fromRGB(255,0,0)
-            h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    -- ESP tab toggles
+    createToggle(pages["ESP"], "Ball ESP", settings.esp, function(v) settings.esp = v end)
+    createToggle(pages["ESP"], "Ball Path Visualizer", settings.ballPath, function(v) settings.ballPath = v end)
+
+    -- Magnet & AutoCatch Logic with Anti-Cheat Bypass
+    local lastCatch = 0
+    local catchCooldown = 0.25
+
+    local function getBall()
+        return workspace:FindFirstChild("Football")
+    end
+
+    local function isFacingTarget(hrpCFrame, targetPos)
+        local lookVector = hrpCFrame.LookVector
+        local dir = (targetPos - hrpCFrame.Position).Unit
+        return lookVector:Dot(dir) > 0.5
+    end
+
+    RunService.Heartbeat:Connect(function()
+        if not settings.magnetEnabled and not settings.autoCatch then return end
+        local ball = getBall()
+        local char = player.Character
+        if not ball or not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+
+        local now = tick()
+        if now - lastCatch < catchCooldown then return end
+
+        local predictedPos = ball.Position + (ball.AssemblyLinearVelocity * 0.15)
+        local distPredicted = (predictedPos - hrp.Position).Magnitude
+        local distCurrent = (ball.Position - hrp.Position).Magnitude
+
+        local facing = true
+        if settings.angleEnhancer then
+            facing = isFacingTarget(hrp.CFrame, ball.Position)
         end
-    end
-end)
 
--- Ball Path Line
-local ballPath
-RunService.RenderStepped:Connect(function()
-    if not settings.path then
-        if ballPath then ballPath.Transparency = 1 end
-        return
-    end
-    local ball = workspace:FindFirstChild("Football")
-    local char = player.Character
-    if not (ball and char and char:FindFirstChild("HumanoidRootPart")) then return end
+        -- Magnet Modes
+        if settings.magnetEnabled and distPredicted <= settings.magnetRange and facing then
+            local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
+            if not bv then
+                bv = Instance.new("BodyVelocity")
+                bv.Name = "FriedHubMagnetBodyVelocity"
+                bv.MaxForce = Vector3.new(1e5,1e5,1e5)
+                bv.Parent = ball
+            end
 
-    if not ballPath then
-        ballPath = Instance.new("Part", workspace)
-        ballPath.Anchored = true
-        ballPath.CanCollide = false
-        ballPath.Transparency = 0.4
-        ballPath.Material = Enum.Material.Neon
-        ballPath.Color = Color3.fromRGB(0, 255, 255)
-        ballPath.Name = "BallPathLine"
-    end
+            if settings.magnetMode == "Legit" then
+                local catchPosLeft = char:FindFirstChild("CatchLeft")
+                local catchPosRight = char:FindFirstChild("CatchRight")
+                if catchPosLeft and catchPosRight then
+                    local targetPos = (catchPosLeft.Position + catchPosRight.Position)/2
+                    bv.Velocity = (targetPos - ball.Position).Unit * 60
+                else
+                    bv.Velocity = (hrp.Position - ball.Position).Unit * 55
+                end
+            elseif settings.magnetMode == "Blatant" then
+                bv.Velocity = (hrp.Position - ball.Position).Unit * 150
+            elseif settings.magnetMode == "League" then
+                local baseVel = (hrp.Position - ball.Position).Unit * 90
+                local noise = Vector3.new(
+                    (math.random() - 0.5) * 5,
+                    (math.random() - 0.5) * 5,
+                    (math.random() - 0.5) * 5
+                )
+                bv.Velocity = baseVel + noise
+            end
 
-    local startPos = ball.Position
-    local endPos = char.HumanoidRootPart.Position
-    local dist = (endPos - startPos).Magnitude
-    ballPath.Size = Vector3.new(0.2, 0.2, dist)
-    ballPath.CFrame = CFrame.new(startPos, endPos) * CFrame.new(0, 0, -dist/2)
-    ballPath.Transparency = 0
-end)
+            if settings.autoCatch and distCurrent <= 5 then
+                -- Firetouchinterest with random delay to bypass anti-cheat
+                local handNames = {"CatchLeft", "CatchRight"}
+                for _, handName in ipairs(handNames) do
+                    local hand = char:FindFirstChild(handName)
+                    if hand then
+                        task.spawn(function()
+                            pcall(function()
+                                firetouchinterest(ball, hand, 0)
+                                task.wait(0.015 + math.random() * 0.015)
+                                firetouchinterest(ball, hand, 1)
+                            end)
+                        end)
+                    end
+                end
+                lastCatch = now
 
-frame.Visible = true
-print("FF2 Undetectable Magnet Script Loaded ✅")
+                -- Freeze tech safely
+                if settings.freezeTech and not hrp.Anchored then
+                    hrp.Anchored = true
+                    task.delay(settings.freezeTime, function()
+                        if hrp and hrp.Parent then
+                            hrp.Anchored = false
+                        end
+                    end)
+                end
+            end
+        else
+            -- Remove BodyVelocity to avoid suspicious lingering objects
+            local bv = ball:FindFirstChild("FriedHubMagnetBodyVelocity")
+            if bv then bv:Destroy() end
+        end
+    end)
+
+    -- Ball ESP
+    RunService.RenderStepped:Connect(function()
+        if not settings.esp then return end
+        local ball = getBall()
+        if ball and not ball:FindFirstChild("FriedHubHighlight") then
+            local highlight = Instance.new("Highlight", ball)
+            highlight.Name = "FriedHubHighlight"
+            highlight.FillColor = Color3.fromRGB(255,255,0)
+            highlight.OutlineColor = Color3.fromRGB(255,0,0)
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        end
+    end)
+
+    -- Ball Path Visualizer
+    -- (You can expand this later if needed)
+
+end
+
+-- Run main function
+task.spawn(main)
